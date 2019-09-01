@@ -1,0 +1,27 @@
+---
+Language: Cpp
+Standard: Cpp11
+IndentWidth: 4
+ColumnLimit: 100
+UseTab: Never
+AlwaysBreakAfterDefinitionReturnType: None
+AlwaysBreakAfterReturnType: None
+MaxEmptyLinesToKeep: 2
+PointerAlignment: Left
+SortIncludes: true
+AllowShortFunctionsOnASingleLine: true
+AllowShortIfStatementsOnASingleLine: true
+AllowShortLoopsOnASingleLine: true
+AlwaysBreakTemplateDeclarations: true
+NamespaceIndentation: All
+BreakBeforeBraces: Custom
+BraceWrapping:
+    AfterClass: true
+    AfterStruct: true
+    AfterEnum: true
+    AfterFunction: true
+    SplitEmptyFunction: false
+PenaltyBreakComment: 100
+PenaltyReturnTypeOnItsOwnLine: 40
+...
+# vim:set ft=yaml:
