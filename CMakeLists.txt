@@ -12,15 +12,13 @@ message(STATUS "Compiler:         ${CMAKE_CXX_COMPILER}")
 message(STATUS "Operating System: ${CMAKE_SYSTEM}")
 message(STATUS "Processor:        ${CMAKE_HOST_SYSTEM_PROCESSOR}")
 
-# set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(BUILD_SHARED_LIBS OFF)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
-# include(compiler_check)
 include(build_safeguards)
 
-# find dependencies find_package(fmt) find_package(loguru)
+# find dependencies
 find_package(Vips REQUIRED)
 
 set(SOURCE_FILES src/main.c)
@@ -35,13 +33,9 @@ add_executable(cimgtool ${SOURCE_FILES})
 target_include_directories(cimgtool PUBLIC ${VIPS_INCLUDE_DIRS})
 target_link_libraries(cimgtool PUBLIC ${VIPS_LIBRARIES})
 
-# set_target_properties(cimgtool PROPERTIES COMPILE_OPTIONS -pedantic -Wall
-# -Wextra)
 set_target_properties(cimgtool PROPERTIES COMPILE_OPTIONS -Wall)
-# -Wall `pkg-config vips --cflags --libs`)
 
 # check include-what-you-use
 include(iwyu)
 
-# install install(TARGETS cimgtool DESTINATION $ENV{HOME}/.local/bin)
-install(TARGETS cimgtool DESTINATION ${PROJECT_SOURCE_DIR})
+install(TARGETS cimgtool DESTINATION $ENV{HOME}/.local/bin)
