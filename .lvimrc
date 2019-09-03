@@ -1,2 +1,10 @@
+" Project-specific vim configuration
+
+" Treat .h and .c as C, not C++
+if expand('%:e') ==# 'h'
+    set filetype=c
+endif
+
+" ALE Options
 let g:ale_c_gcc_options = '-Wall `pkg-config vips --cflags --libs`'
 let g:ale_linters['c'] = ['clangtidy']
