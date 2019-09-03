@@ -53,7 +53,7 @@ extern "C" {
  *  @param argc the number of command line arguments
  *  @param argv the array of command line arguments.
  */
-void debug_init(int*, const char**);
+void debug_init(int, FILE*);
 
 /** Send the debug output to a file
  *  @param fileName name of file to write debug output to

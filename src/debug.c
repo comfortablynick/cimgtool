@@ -8,7 +8,7 @@ int debug_level = 0;
 
 FILE* debug_file = 0;
 
-static const char* prefix = "-debug";
+/** static const char* prefix = "-debug"; */
 
 
 /** This routine will initialize the variables from the arguments passed to
@@ -28,32 +28,32 @@ static const char* prefix = "-debug";
  */
 
 void
-debug_init(int* argc, const char* argv[])
+debug_init(int level, FILE* file)
 {
-    debug_file = stderr;
-
-    if (*argc > 1) {
-        const char* arg1 = argv[1];
-        size_t len = strlen(prefix);
-
-        if (strncmp(arg1, prefix, len) == 0) {
-            debug_level = 1;
-
-            char* ats = strchr(arg1, '@');
-
-            if (ats) {
-                *ats = '\0';
-                debug_to_file(ats + 1);
-            }
-
-            if (strlen(arg1) > len) debug_level = atoi(arg1 + len);
-
-            (*argc)--; // decrement number of arguments
-
-            for (int i = 1; i < *argc; i++) // remove first argument
-                argv[i] = argv[i + 1];
-        }
-    }
+    debug_file = file;
+    debug_level = level;
+    /** if (*argc > 1) { */
+    /**     const char* arg1 = argv[1]; */
+    /**     size_t len = strlen(prefix); */
+    /**  */
+    /**     if (strncmp(arg1, prefix, len) == 0) { */
+    /**         debug_level = 1; */
+    /**  */
+    /**         char* ats = strchr(arg1, '@'); */
+    /**  */
+    /**         if (ats) { */
+    /**             *ats = '\0'; */
+    /**             debug_to_file(ats + 1); */
+    /**         } */
+    /**  */
+    /**         if (strlen(arg1) > len) debug_level = atoi(arg1 + len); */
+    /**  */
+    /**         (*argc)--; // decrement number of arguments */
+    /**  */
+    /**         for (int i = 1; i < *argc; i++) // remove first argument */
+    /**             argv[i] = argv[i + 1]; */
+    /**     } */
+    /** } */
 }
 
 /** Send debugging output to a file.
