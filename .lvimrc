@@ -2,7 +2,7 @@
 
 " Treat .h and .c as C, not C++
 if index(['h', 'c'], expand('%:e')) > -1
-    set filetype=c.doxygen " Use doxygen highlighting
+    set filetype=c
 endif
 
 " ALE Options

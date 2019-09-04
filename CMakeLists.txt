@@ -23,10 +23,12 @@ find_package(Vips REQUIRED)
 
 set(SOURCE_FILES src/main.c)
 
-# configure message(STATUS "Running configure") include(configure)
-# configure_file("${PROJECT_SOURCE_DIR}/cmake/config_h.cmake"
-# "${PROJECT_SOURCE_DIR}/config.h" @ONLY) message(STATUS "Running configure -
-# done")
+# configure
+message(STATUS "Running configure")
+include(configure)
+configure_file("${PROJECT_SOURCE_DIR}/cmake/config_h.cmake"
+               "${PROJECT_SOURCE_DIR}/config.h" @ONLY)
+message(STATUS "Running configure - done")
 
 add_executable(cimgtool ${SOURCE_FILES})
 

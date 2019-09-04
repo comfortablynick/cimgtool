@@ -1,20 +1,85 @@
+#include "../config.h"
 #include <getopt.h>
 #include <stdio.h>
 #include <string.h>
 #include <vips/vips.h>
 
-static char* prog_version = "0.0.1";
+/**
+ * Command line options
+ */
+typedef struct
+{
+    const char* input_file;
+    const char* output_file;
+    int verbosity;
+    int no_op;
+} options_t;
 
 /**
  * @brief Dummy no-op handler for logging
  * @return void
  */
 static void
-_dummy_handler(const gchar* log_domain, GLogLevelFlags log_level, const gchar* message,
-               gpointer user_data)
+_glog_dummy_handler(const gchar* log_domain, GLogLevelFlags log_level, const gchar* message,
+                    gpointer user_data)
 
 {
     return;
+}
+
+static void
+print_help()
+{
+
+    fprintf(stderr, "Usage: %s [FLAGS] [OPTIONS] <input_file> [output_file]\n%s", PACKAGE_NAME,
+            "FLAGS:\n"
+            "  -h, --help           Display this help message and exit\n"
+            "  -V, --version        Display program version and exit\n"
+            "  -v, --verbosity=[N]  Increase console debug message verbosity\n"
+            "OPTIONS:\n");
+}
+
+int
+parse_args(int argc, char** argv, options_t* options)
+{
+    int choice;
+    static struct option long_options[] = {{"verbosity", optional_argument, 0, 'v'},
+                                           {"version", no_argument, 0, 'V'},
+                                           {"help", no_argument, 0, 'h'},
+                                           {0, 0, 0, 0}};
+
+    int option_index = 0;
+
+    while ((choice = getopt_long(argc, argv, "Vhvni:o:", long_options, &option_index)) != -1) {
+        switch (choice) {
+        case 'V':
+            fprintf(stderr, "%s %s\n", argv[0], PACKAGE_VERSION);
+            return EXIT_FAILURE;
+            break;
+        case 'v':
+            if (optarg && atoi(optarg)) {
+                options->verbosity = atoi(optarg);
+            } else {
+                options->verbosity++;
+            }
+            break;
+        case 'n':
+            options->no_op = 1;
+            break;
+        case ':':
+            fprintf(stderr, "%s: option `-%c' requires an argument\n", argv[0], optopt);
+            break;
+        case '?':
+            fprintf(stderr, "%s: option `-%c' not recognized\n", argv[0], optopt);
+            break;
+        case 'h':
+        default:
+            print_help();
+            exit(1);
+            break;
+        }
+    }
+    return 0;
 }
 
 int
@@ -22,57 +87,29 @@ main(int argc, char** argv)
 {
     VipsImage* in = NULL;
     VipsImage* out = NULL;
+    const char* orig_file_name = NULL;
     double mean;
     int in_width = 0;
     int in_height = 0;
-    int verbosity = 0;
-    char* in_name = NULL;
 
-    int choice;
-    static struct option long_options[] = {
-        /* Argument styles: no_argument, required_argument, optional_argument */
-        {"input", required_argument, NULL, 'i'}, {"output", required_argument, NULL, 'o'},
-        {"verbose", optional_argument, 0, 'v'},  {"version", no_argument, 0, 'V'},
-        {"help", no_argument, 0, 'h'},           {0, 0, 0, 0}};
+    // Init command line options
+    options_t options = {
+        .input_file = NULL,
+        .output_file = NULL,
+        .verbosity = 0,
+        .no_op = 0,
+    };
 
-    int option_index = 0;
-
-    while ((choice = getopt_long(argc, argv, "Vhvi:o:", long_options, &option_index)) != -1) {
-        switch (choice) {
-        case 'V':
-            fprintf(stderr, "%s %s\n", argv[0], prog_version);
-            return EXIT_FAILURE;
-            break;
-        case 'h':
-            fputs("help placeholder\n", stderr);
-            return EXIT_FAILURE;
-            break;
-        case 'v':
-            if (optarg && atoi(optarg)) {
-                verbosity = atoi(optarg);
-            } else {
-                verbosity++;
-            }
-            break;
-        case 'i':
-            in_name = optarg;
-            break;
-        case ':':
-            fprintf(stderr, "%s: option `-%c' requires an argument\n", argv[0], optopt);
-            break;
-        case '?':
-            // getopt_long will have already printed an error
-            break;
-        default:
-            break;
-        }
+    if (parse_args(argc, argv, &options)) {
+        fprintf(stderr, "%s: error parsing command-line arguments", argv[0]);
+        return 1;
     }
 
     // Logging
     // Set dummy handler for all levels
     // Set logging level based on verbosity flag
-    g_log_set_handler(NULL, G_LOG_LEVEL_MASK, _dummy_handler, NULL);
-    switch (verbosity) {
+    g_log_set_handler(NULL, G_LOG_LEVEL_MASK, _glog_dummy_handler, NULL);
+    switch (options.verbosity) {
     case 0:
         g_log_set_handler(NULL, G_LOG_LEVEL_ERROR | G_LOG_LEVEL_CRITICAL, g_log_default_handler,
                           NULL);
@@ -84,32 +121,42 @@ main(int argc, char** argv)
         g_log_set_handler(NULL, G_LOG_LEVEL_DEBUG | G_LOG_LEVEL_INFO, g_log_default_handler, NULL);
         break;
     }
-    if (verbosity) {
+    if (options.verbosity) {
         setenv("G_MESSAGES_DEBUG", "all", 1);
-        g_info("Verbosity level: %d", verbosity);
+        g_info("Verbosity level: %d", options.verbosity);
     }
-    // Deal with non-option arguments here
+
+    // Deal with positional options
+    options.input_file = argv[optind++];
+    options.output_file = argv[optind++];
+
     if (optind < argc) {
-        g_info("non-option ARGV-elements: ");
+        g_info("Additional non-option ARGV-elements: ");
         while (optind < argc) {
             g_info("%s ", argv[optind++]);
         }
+    }
+    if (!options.input_file) {
+        fprintf(stderr, "%s: input file required\n", argv[0]);
+        exit(1);
     }
 
     if (VIPS_INIT(argv[0])) {
         vips_error_exit("Unable to start VIPS");
     }
-    if (!(in = vips_image_new_from_file(in_name, NULL))) {
+    if (!(in = vips_image_new_from_file(options.input_file, NULL))) {
         vips_error_exit(NULL);
     }
 
 
-    in_name = g_path_get_basename(in_name);
+    orig_file_name = g_path_get_basename(options.input_file);
     in_width = vips_image_get_width(in);
     in_height = vips_image_get_height(in);
-    g_debug("Input file: %s", in_name);
 
-    printf("Input file: %s\n", in_name);
+    if (options.no_op) {
+        puts("***Display results only***");
+    }
+    printf("Input file: %s\n", orig_file_name);
     printf("image width = %d\n", in_width);
     printf("image height = %d\n", in_height);
     g_info("Image dims: %d x %d", in_width, in_height);
@@ -126,8 +173,10 @@ main(int argc, char** argv)
 
     g_object_unref(in);
 
-    if (vips_image_write_to_file(out, argv[2], NULL)) {
-        vips_error_exit(NULL);
+    if (!options.no_op) {
+        if (vips_image_write_to_file(out, argv[2], NULL)) {
+            vips_error_exit(NULL);
+        }
     }
 
     g_object_unref(out);
