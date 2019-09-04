@@ -1,14 +1,19 @@
 #include <getopt.h>
 #include <stdio.h>
+#include <string.h>
 #include <vips/vips.h>
 
 static char* prog_version = "0.0.1";
 
+/**
+ * @brief Dummy no-op handler for logging
+ * @return void
+ */
 static void
-_dummy(const gchar* log_domain, GLogLevelFlags log_level, const gchar* message, gpointer user_data)
+_dummy_handler(const gchar* log_domain, GLogLevelFlags log_level, const gchar* message,
+               gpointer user_data)
 
 {
-    /* Dummy does nothing */
     return;
 }
 
@@ -32,7 +37,7 @@ main(int argc, char** argv)
 
     int option_index = 0;
 
-    while ((choice = getopt_long(argc, argv, "Vhv::i:o:", long_options, &option_index)) != -1) {
+    while ((choice = getopt_long(argc, argv, "Vhvi:o:", long_options, &option_index)) != -1) {
         switch (choice) {
         case 'V':
             fprintf(stderr, "%s %s\n", argv[0], prog_version);
@@ -43,11 +48,11 @@ main(int argc, char** argv)
             return EXIT_FAILURE;
             break;
         case 'v':
-            if (optarg) {
+            if (optarg && atoi(optarg)) {
                 verbosity = atoi(optarg);
-                break;
+            } else {
+                verbosity++;
             }
-            verbosity++;
             break;
         case 'i':
             in_name = optarg;
@@ -56,16 +61,17 @@ main(int argc, char** argv)
             fprintf(stderr, "%s: option `-%c' requires an argument\n", argv[0], optopt);
             break;
         case '?':
-            /* getopt_long will have already printed an error */
+            // getopt_long will have already printed an error
             break;
         default:
-            /* Not sure how to get here... */
             break;
         }
     }
 
-    /* Set dummy for all levels */
-    g_log_set_handler(NULL, G_LOG_LEVEL_MASK, _dummy, NULL);
+    // Logging
+    // Set dummy handler for all levels
+    // Set logging level based on verbosity flag
+    g_log_set_handler(NULL, G_LOG_LEVEL_MASK, _dummy_handler, NULL);
     switch (verbosity) {
     case 0:
         g_log_set_handler(NULL, G_LOG_LEVEL_ERROR | G_LOG_LEVEL_CRITICAL, g_log_default_handler,
@@ -78,12 +84,11 @@ main(int argc, char** argv)
         g_log_set_handler(NULL, G_LOG_LEVEL_DEBUG | G_LOG_LEVEL_INFO, g_log_default_handler, NULL);
         break;
     }
-    /** if (verbosity) { */
-    /**     setenv("G_MESSAGES_DEBUG", "all", 1); */
-    /**     g_info("Verbosity level: %d", verbosity); */
-    /** } */
-
-    /* Deal with non-option arguments here */
+    if (verbosity) {
+        setenv("G_MESSAGES_DEBUG", "all", 1);
+        g_info("Verbosity level: %d", verbosity);
+    }
+    // Deal with non-option arguments here
     if (optind < argc) {
         g_info("non-option ARGV-elements: ");
         while (optind < argc) {

@@ -1,8 +1,8 @@
 " Project-specific vim configuration
 
 " Treat .h and .c as C, not C++
-if expand('%:e') ==# 'h'
-    set filetype=c
+if index(['h', 'c'], expand('%:e')) > -1
+    set filetype=c.doxygen " Use doxygen highlighting
 endif
 
 " ALE Options
