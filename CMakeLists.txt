@@ -21,7 +21,7 @@ include(build_safeguards)
 # find dependencies
 find_package(Vips REQUIRED)
 
-set(SOURCE_FILES src/main.c src/debug.c)
+set(SOURCE_FILES src/main.c)
 
 # configure message(STATUS "Running configure") include(configure)
 # configure_file("${PROJECT_SOURCE_DIR}/cmake/config_h.cmake"
