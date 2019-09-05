@@ -10,6 +10,7 @@ typedef struct
     const char* input_file;
     const char* output_file;
     const char* output_file_suffix;
+    double pct_scale;
     int width;
     int height;
     int verbosity;
@@ -56,12 +57,14 @@ print_options_t(char* buf, size_t bufsize, options_t* options)
              "Input file:        %s\n"
              "Output file:       %s\n"
              "Output suffix:     %s\n"
+             "Pct scale:         %.1f\n"
              "Width:             %d\n"
              "Height:            %d\n"
              "Verbosity:         %d\n"
              "No-op:             %d\n",
-             options->input_file, options->output_file, options->output_file_suffix, options->width,
-             options->height, options->verbosity, options->no_op);
+             options->input_file, options->output_file, options->output_file_suffix,
+             options->pct_scale, options->width, options->height, options->verbosity,
+             options->no_op);
 }
 
 int
@@ -72,6 +75,7 @@ parse_args(int argc, char** argv, options_t* options)
                                            {"version", no_argument, 0, 'V'},
                                            {"help", no_argument, 0, 'h'},
                                            {"suffix", required_argument, 0, 's'},
+                                           {"pct-scale", required_argument, 0, 'p'},
                                            {"width", required_argument, 0, 'w'},
                                            {"height", required_argument, 0, 'H'},
                                            {0, 0, 0, 0}};
@@ -96,6 +100,9 @@ parse_args(int argc, char** argv, options_t* options)
             break;
         case 's':
             options->output_file_suffix = optarg;
+            break;
+        case 'p':
+            options->pct_scale = atof(optarg);
             break;
         case 'w':
             options->width = atoi(optarg);
@@ -133,6 +140,7 @@ main(int argc, char** argv)
         .input_file = NULL,
         .output_file = NULL,
         .output_file_suffix = "_edit",
+        .pct_scale = 0,
         .width = 0,
         .height = 0,
         .verbosity = 0,
