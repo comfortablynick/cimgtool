@@ -61,7 +61,7 @@ print_options_t(char* buf, size_t bufsize, options_t* options)
              "Width:             %d\n"
              "Height:            %d\n"
              "Verbosity:         %d\n"
-             "No-op:             %d\n",
+             "No-op:             %d",
              options->input_file, options->output_file, options->output_file_suffix,
              options->pct_scale, options->width, options->height, options->verbosity,
              options->no_op);
@@ -82,7 +82,7 @@ parse_args(int argc, char** argv, options_t* options)
 
     int option_index = 0;
 
-    while ((choice = getopt_long(argc, argv, "Vhvnw:H:", long_options, &option_index)) != -1) {
+    while ((choice = getopt_long(argc, argv, "Vhvnw:H:p:", long_options, &option_index)) != -1) {
         switch (choice) {
         case 'V':
             fprintf(stderr, "%s %s\n", argv[0], PACKAGE_VERSION);
@@ -102,7 +102,7 @@ parse_args(int argc, char** argv, options_t* options)
             options->output_file_suffix = optarg;
             break;
         case 'p':
-            options->pct_scale = atof(optarg);
+            options->pct_scale = atof(optarg)/100;
             break;
         case 'w':
             options->width = atoi(optarg);
@@ -131,9 +131,13 @@ main(int argc, char** argv)
 {
     VipsImage* in = NULL;
     VipsImage* out = NULL;
-    const char* orig_file_name = NULL;
+    char* orig_file_name = NULL;
+    // char* orig_file_ext = NULL;
+    char orig_file_ext[8];
     int in_width = 0;
     int in_height = 0;
+    int out_width = 0;
+    int out_height = 0;
 
     // Init command line options
     options_t options = {
@@ -181,7 +185,7 @@ main(int argc, char** argv)
     if (options.verbosity > 1) {
         char buf[250];
         print_options_t(buf, sizeof(buf), &options);
-        g_debug(buf);
+        g_debug("%s", buf);
     }
 
     if (optind < argc) {
@@ -204,16 +208,25 @@ main(int argc, char** argv)
 
 
     orig_file_name = g_path_get_basename(options.input_file);
+    strncpy(orig_file_ext, strrchr(orig_file_name, '.'), sizeof(orig_file_ext));
+    
+
+    if (!options.output_file) {
+        g_info("Output file not supplied; using suffix '%s'", options.output_file_suffix);
+        g_info("File extension: %s", orig_file_ext);
+        g_info("New filename: %s%s%s", orig_file_name, options.output_file_suffix, orig_file_ext);
+    }
+
     in_width = vips_image_get_width(in);
     in_height = vips_image_get_height(in);
+    g_info("Input dims: %d x %d", in_width, in_height);
 
-    if (options.no_op) {
-        puts("***Display results only***");
+    if (options.pct_scale) {
+        g_info("Scaling image");
+        if (vips_resize(in, &out, options.pct_scale, NULL)) {
+            vips_error_exit(NULL);
+        }
     }
-    printf("Input file: %s\n", orig_file_name);
-    printf("image width = %d\n", in_width);
-    printf("image height = %d\n", in_height);
-    g_info("Image dims: %d x %d", in_width, in_height);
 
     /* if (vips_avg(in, &mean, NULL)) {
         vips_error_exit(NULL);
@@ -221,14 +234,28 @@ main(int argc, char** argv)
 
     printf("mean pixel value = %g\n", mean); */
 
-    if (vips_invert(in, &out, NULL)) {
+    /** if (vips_invert(in, &out, NULL)) {
         vips_error_exit(NULL);
+    } */
+
+    out_width = vips_image_get_width(out);
+    out_height = vips_image_get_height(out);
+
+    if (options.no_op) {
+        puts("***Display results only***");
     }
+    printf("Input file:      %s\n", orig_file_name);
+    printf("Input width:     %d\n", in_width);
+    printf("Input height:    %d\n", in_height);
+
+    // printf("Output file:   %s\n", orig_file_name);
+    printf("Output width:    %d\n", out_width);
+    printf("Output height:   %d\n", out_height);
 
     g_object_unref(in);
 
     if (!options.no_op) {
-        if (vips_image_write_to_file(out, argv[2], NULL)) {
+        if (vips_image_write_to_file(out, options.output_file, NULL)) {
             vips_error_exit(NULL);
         }
     }
