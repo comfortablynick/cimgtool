@@ -18,15 +18,20 @@ typedef struct
 } options_t;
 
 
-static const char* help_text = "Usage: cimgtool [FLAGS] [OPTIONS] <input_file> [output_file]\n"
-                               "\n"
-                               "FLAGS:\n"
-                               "  -h, --help           Display this help message and exit\n"
-                               "  -V, --version        Display program version and exit\n"
-                               "  -v, --verbosity=[N]  Increase console debug message verbosity\n"
-                               "OPTIONS:\n"
-                               "  -w, --width          Output width of image\n"
-                               "  -H, --height         Output height of image\n";
+static const char* help_text =
+    "Usage: cimgtool [FLAGS] [OPTIONS] <input_file> [output_file]\n"
+    "\n"
+    "FLAGS:\n"
+    "  -h, --help             Display this help message and exit\n"
+    "  -V, --version          Display program version and exit\n"
+    "  -v, --verbosity=<N>    Increase console debug message verbosity\n"
+    "\n"
+    "OPTIONS:\n"
+    "  -w, --width            Output width of image\n"
+    "  -H, --height           Output height of image\n"
+    "  -p, --pct-scale=<N>    Scale output to pct of original size\n"
+    "  -s, --suffix=<TEXT>    Suffix to append to file name for edited file\n"
+    "\n";
 
 /**
  * @brief Dummy no-op handler for logging
@@ -102,7 +107,7 @@ parse_args(int argc, char** argv, options_t* options)
             options->output_file_suffix = optarg;
             break;
         case 'p':
-            options->pct_scale = atof(optarg)/100;
+            options->pct_scale = atof(optarg) / 100;
             break;
         case 'w':
             options->width = atoi(optarg);
@@ -209,7 +214,7 @@ main(int argc, char** argv)
 
     orig_file_name = g_path_get_basename(options.input_file);
     strncpy(orig_file_ext, strrchr(orig_file_name, '.'), sizeof(orig_file_ext));
-    
+
 
     if (!options.output_file) {
         g_info("Output file not supplied; using suffix '%s'", options.output_file_suffix);
