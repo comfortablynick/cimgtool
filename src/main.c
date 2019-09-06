@@ -131,24 +131,35 @@ parse_args(int argc, char **argv, options_t *options)
     return 0;
 }
 
+/**
+ * @brief Format bytes as a human-readable string.
+ *
+ * @param bytes_raw Bytes to format
+ *
+ * @return char *
+ */
 static char *
 humanize_bytes(size_t bytes_raw)
 {
     static const char units[] = {
-        0,   // not used
-        'K', // kibi ('k' for kilo is a special case)
-        'M', // mega or mebi
-        'G', // giga or gibi
-        'T', // tera or tebi
-        'P', // peta or pebi
-        'E', // exa or exbi
-        'Z', // zetta or 2**70
+        '\0', // not used
+        'K',  // kibi ('k' for kilo is a special case)
+        'M',  // mega or mebi
+        'G',  // giga or gibi
+        'T',  // tera or tebi
+        'P',  // peta or pebi
+        'E',  // exa or exbi
+        'Z',  // zetta or 2**70
     };
     char suffix = 'B';
     char *s = malloc(8);
     double bytes = (double)bytes_raw;
     double factor = 1024;
 
+    if (bytes < factor) {
+        sprintf(s, "%.f%c", bytes, suffix);
+        return s;
+    }
     for (size_t i = 0; i < sizeof(units); ++i) {
         if (bytes < factor) {
             sprintf(s, "%3.1f%c%c", bytes, units[i], suffix);
@@ -261,7 +272,7 @@ main(int argc, char **argv)
 
     in_width = vips_image_get_width(in);
     in_height = vips_image_get_height(in);
-    in_size = sizeof(in);
+    in_size = sizeof(*in);
     in_size_human = humanize_bytes(in_size);
     g_info("Input dims: %d x %d", in_width, in_height);
     g_debug("Input file size: %lu", in_size);
