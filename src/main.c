@@ -7,9 +7,9 @@
 // Command line options
 typedef struct
 {
-    const char* input_file;
-    const char* output_file;
-    const char* output_file_suffix;
+    char* input_file;
+    char* output_file;
+    char* output_file_suffix;
     double pct_scale;
     int width;
     int height;
@@ -87,7 +87,7 @@ parse_args(int argc, char** argv, options_t* options)
 
     int option_index = 0;
 
-    while ((choice = getopt_long(argc, argv, "Vhvnw:H:p:", long_options, &option_index)) != -1) {
+    while ((choice = getopt_long(argc, argv, "Vhvnw:H:p:s:", long_options, &option_index)) != -1) {
         switch (choice) {
         case 'V':
             fprintf(stderr, "%s %s\n", argv[0], PACKAGE_VERSION);
@@ -137,7 +137,6 @@ main(int argc, char** argv)
     VipsImage* in = NULL;
     VipsImage* out = NULL;
     char* orig_file_name = NULL;
-    // char* orig_file_ext = NULL;
     char orig_file_ext[8];
     int in_width = 0;
     int in_height = 0;
@@ -148,7 +147,7 @@ main(int argc, char** argv)
     options_t options = {
         .input_file = NULL,
         .output_file = NULL,
-        .output_file_suffix = "_edit",
+        .output_file_suffix = "_edited",
         .pct_scale = 0,
         .width = 0,
         .height = 0,
@@ -213,13 +212,19 @@ main(int argc, char** argv)
 
 
     orig_file_name = g_path_get_basename(options.input_file);
-    strncpy(orig_file_ext, strrchr(orig_file_name, '.'), sizeof(orig_file_ext));
+    g_strlcpy(orig_file_ext, strrchr(orig_file_name, '.'), sizeof(orig_file_ext));
 
 
     if (!options.output_file) {
+        char bare_name[strlen(orig_file_name) - strlen(orig_file_ext) + 1];
+        char new_name[strlen(options.input_file) + strlen(options.output_file_suffix)];
         g_info("Output file not supplied; using suffix '%s'", options.output_file_suffix);
+        g_strlcpy(bare_name, orig_file_name, sizeof(bare_name));
+        g_debug("Filename without ext: %s", bare_name);
         g_info("File extension: %s", orig_file_ext);
-        g_info("New filename: %s%s%s", orig_file_name, options.output_file_suffix, orig_file_ext);
+        sprintf(new_name, "%s%s%s", bare_name, options.output_file_suffix, orig_file_ext);
+        g_info("New filename: %s", new_name);
+        // options.output_file = new_name;
     }
 
     in_width = vips_image_get_width(in);
@@ -233,29 +238,19 @@ main(int argc, char** argv)
         }
     }
 
-    /* if (vips_avg(in, &mean, NULL)) {
-        vips_error_exit(NULL);
-    }
-
-    printf("mean pixel value = %g\n", mean); */
-
-    /** if (vips_invert(in, &out, NULL)) {
-        vips_error_exit(NULL);
-    } */
-
     out_width = vips_image_get_width(out);
     out_height = vips_image_get_height(out);
 
-    if (options.no_op) {
-        puts("***Display results only***");
-    }
-    printf("Input file:      %s\n", orig_file_name);
-    printf("Input width:     %d\n", in_width);
-    printf("Input height:    %d\n", in_height);
-
-    // printf("Output file:   %s\n", orig_file_name);
-    printf("Output width:    %d\n", out_width);
-    printf("Output height:   %d\n", out_height);
+    printf("%s"
+           "Input file:        %s\n"
+           "Input width:       %d\n"
+           "Input height:      %d\n"
+           "\n"
+           "Output file:       %s\n"
+           "Output width:      %d\n"
+           "Output height:     %d\n",
+           options.no_op ? "***Display results only***\n" : "", orig_file_name, in_width, in_height,
+           options.output_file, out_width, out_height);
 
     g_object_unref(in);
 
