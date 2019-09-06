@@ -5,7 +5,7 @@
 #include <vips/vips.h>
 
 // Command line options
-typedef struct
+typedef struct _options_t
 {
     char *input_file;
     char *output_file;
@@ -131,6 +131,37 @@ parse_args(int argc, char **argv, options_t *options)
     return 0;
 }
 
+static char *
+humanize_bytes(size_t bytes_raw)
+{
+    static const char units[] = {
+        0,   // not used
+        'K', // kibi ('k' for kilo is a special case)
+        'M', // mega or mebi
+        'G', // giga or gibi
+        'T', // tera or tebi
+        'P', // peta or pebi
+        'E', // exa or exbi
+        'Z', // zetta or 2**70
+    };
+    char suffix = 'B';
+    char *s = malloc(8);
+    double bytes = (double)bytes_raw;
+    double factor = 1024;
+
+    for (size_t i = 0; i < sizeof(units); ++i) {
+        if (bytes < factor) {
+            sprintf(s, "%3.1f%c%c", bytes, units[i], suffix);
+            return s;
+        }
+        bytes = (bytes / factor);
+    }
+    // if we got here, it's a really big number!
+    // return yottabytes
+    sprintf(s, "%.1f%c%c", bytes, 'Y', suffix);
+    return s;
+}
+
 int
 main(int argc, char **argv)
 {
@@ -142,21 +173,19 @@ main(int argc, char **argv)
     int in_height = 0;
     int out_width = 0;
     int out_height = 0;
+    size_t in_size = 0;
+    char *in_size_human = NULL;
 
     // Init command line options
-    options_t options = {
-        .input_file = NULL,
-        .output_file = NULL,
-        .output_file_suffix = "_edited",
-        .pct_scale = 0,
-        .width = 0,
-        .height = 0,
-        .verbosity = 0,
-        .no_op = 0,
-    };
-
-    options_t *opts;
-    opts = &options;
+    options_t *opts = malloc(sizeof(options_t));
+    opts->input_file = NULL;
+    opts->output_file = NULL;
+    opts->output_file_suffix = "_edited";
+    opts->pct_scale = 0;
+    opts->width = 0;
+    opts->height = 0;
+    opts->verbosity = 0;
+    opts->no_op = 0;
 
     if (parse_args(argc, argv, opts)) {
         fprintf(stderr, "%s: error parsing command-line arguments", argv[0]);
@@ -190,17 +219,17 @@ main(int argc, char **argv)
     orig_file_name = g_path_get_basename(opts->input_file);
     g_strlcpy(orig_file_ext, strrchr(orig_file_name, '.'), sizeof(orig_file_ext));
 
-
     if (!opts->output_file) {
         char bare_name[strlen(orig_file_name) - strlen(orig_file_ext) + 1];
-        char new_name[strlen(opts->input_file) + strlen(opts->output_file_suffix)];
         g_info("Output file not supplied; using suffix '%s'", opts->output_file_suffix);
         g_strlcpy(bare_name, orig_file_name, sizeof(bare_name));
         g_debug("Filename without ext: %s", bare_name);
         g_info("File extension: %s", orig_file_ext);
-        sprintf(new_name, "%s%s%s", bare_name, opts->output_file_suffix, orig_file_ext);
-        g_info("New filename: %s", new_name);
-        opts->output_file = new_name;
+
+        // Assign new filename to opts struct
+        opts->output_file = malloc(strlen(opts->input_file) + strlen(opts->output_file_suffix));
+        sprintf(opts->output_file, "%s%s%s", bare_name, opts->output_file_suffix, orig_file_ext);
+        g_info("New filename: %s", opts->output_file);
     }
 
 
@@ -232,7 +261,11 @@ main(int argc, char **argv)
 
     in_width = vips_image_get_width(in);
     in_height = vips_image_get_height(in);
+    in_size = sizeof(in);
+    in_size_human = humanize_bytes(in_size);
     g_info("Input dims: %d x %d", in_width, in_height);
+    g_debug("Input file size: %lu", in_size);
+    g_info("Input file size human: %s", in_size_human);
 
     if (opts->pct_scale) {
         g_info("Scaling image");
@@ -267,7 +300,8 @@ main(int argc, char **argv)
         }
     }
 
+    free(opts);
+    free(opts->output_file);
+    free(in_size_human);
     g_object_unref(out);
-
-    return (0);
 }
