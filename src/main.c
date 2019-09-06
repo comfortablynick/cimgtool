@@ -7,9 +7,9 @@
 // Command line options
 typedef struct
 {
-    char* input_file;
-    char* output_file;
-    char* output_file_suffix;
+    char *input_file;
+    char *output_file;
+    char *output_file_suffix;
     double pct_scale;
     int width;
     int height;
@@ -18,7 +18,7 @@ typedef struct
 } options_t;
 
 
-static const char* help_text =
+static const char *help_text =
     "Usage: cimgtool [FLAGS] [OPTIONS] <input_file> [output_file]\n"
     "\n"
     "FLAGS:\n"
@@ -38,7 +38,7 @@ static const char* help_text =
  * @return void
  */
 static void
-_glog_dummy_handler(const gchar* log_domain, GLogLevelFlags log_level, const gchar* message,
+_glog_dummy_handler(const gchar *log_domain, GLogLevelFlags log_level, const gchar *message,
                     gpointer user_data)
 
 {
@@ -54,7 +54,7 @@ _glog_dummy_handler(const gchar* log_domain, GLogLevelFlags log_level, const gch
  * @return void
  */
 static void
-print_options_t(char* buf, size_t bufsize, options_t* options)
+print_options_t(char *buf, size_t bufsize, options_t *options)
 {
     if (!buf) return;
     snprintf(buf, bufsize,
@@ -73,7 +73,7 @@ print_options_t(char* buf, size_t bufsize, options_t* options)
 }
 
 int
-parse_args(int argc, char** argv, options_t* options)
+parse_args(int argc, char **argv, options_t *options)
 {
     int choice;
     static struct option long_options[] = {{"verbosity", optional_argument, 0, 'v'},
@@ -132,11 +132,11 @@ parse_args(int argc, char** argv, options_t* options)
 }
 
 int
-main(int argc, char** argv)
+main(int argc, char **argv)
 {
-    VipsImage* in = NULL;
-    VipsImage* out = NULL;
-    char* orig_file_name = NULL;
+    VipsImage *in = NULL;
+    VipsImage *out = NULL;
+    char *orig_file_name = NULL;
     char orig_file_ext[8];
     int in_width = 0;
     int in_height = 0;
@@ -155,7 +155,10 @@ main(int argc, char** argv)
         .no_op = 0,
     };
 
-    if (parse_args(argc, argv, &options)) {
+    options_t *opts;
+    opts = &options;
+
+    if (parse_args(argc, argv, opts)) {
         fprintf(stderr, "%s: error parsing command-line arguments", argv[0]);
         return 1;
     }
@@ -164,7 +167,7 @@ main(int argc, char** argv)
     // Set dummy handler for all levels
     // Set logging level based on verbosity flag
     g_log_set_handler(NULL, G_LOG_LEVEL_MASK, _glog_dummy_handler, NULL);
-    switch (options.verbosity) {
+    switch (opts->verbosity) {
     case 0:
         g_log_set_handler(NULL, G_LOG_LEVEL_ERROR | G_LOG_LEVEL_CRITICAL, g_log_default_handler,
                           NULL);
@@ -176,19 +179,35 @@ main(int argc, char** argv)
         g_log_set_handler(NULL, G_LOG_LEVEL_DEBUG | G_LOG_LEVEL_INFO, g_log_default_handler, NULL);
         break;
     }
-    if (options.verbosity) {
+    if (opts->verbosity) {
         setenv("G_MESSAGES_DEBUG", "all", 1);
-        g_info("Verbosity level: %d", options.verbosity);
+        g_info("Verbosity level: %d", opts->verbosity);
     }
 
     // Deal with positional options
-    options.input_file = argv[optind++];
-    options.output_file = argv[optind++];
+    opts->input_file = argv[optind++];
+    opts->output_file = argv[optind++];
+    orig_file_name = g_path_get_basename(opts->input_file);
+    g_strlcpy(orig_file_ext, strrchr(orig_file_name, '.'), sizeof(orig_file_ext));
+
+
+    if (!opts->output_file) {
+        char bare_name[strlen(orig_file_name) - strlen(orig_file_ext) + 1];
+        char new_name[strlen(opts->input_file) + strlen(opts->output_file_suffix)];
+        g_info("Output file not supplied; using suffix '%s'", opts->output_file_suffix);
+        g_strlcpy(bare_name, orig_file_name, sizeof(bare_name));
+        g_debug("Filename without ext: %s", bare_name);
+        g_info("File extension: %s", orig_file_ext);
+        sprintf(new_name, "%s%s%s", bare_name, opts->output_file_suffix, orig_file_ext);
+        g_info("New filename: %s", new_name);
+        opts->output_file = new_name;
+    }
+
 
     // Debug print for options
-    if (options.verbosity > 1) {
+    if (opts->verbosity > 1) {
         char buf[250];
-        print_options_t(buf, sizeof(buf), &options);
+        print_options_t(buf, sizeof(buf), opts);
         g_debug("%s", buf);
     }
 
@@ -198,7 +217,7 @@ main(int argc, char** argv)
             g_info("%s ", argv[optind++]);
         }
     }
-    if (!options.input_file) {
+    if (!opts->input_file) {
         fprintf(stderr, "%s: input file required\n", argv[0]);
         exit(1);
     }
@@ -206,34 +225,18 @@ main(int argc, char** argv)
     if (VIPS_INIT(argv[0])) {
         vips_error_exit("Unable to start VIPS");
     }
-    if (!(in = vips_image_new_from_file(options.input_file, NULL))) {
+    if (!(in = vips_image_new_from_file(opts->input_file, NULL))) {
         vips_error_exit(NULL);
     }
 
-
-    orig_file_name = g_path_get_basename(options.input_file);
-    g_strlcpy(orig_file_ext, strrchr(orig_file_name, '.'), sizeof(orig_file_ext));
-
-
-    if (!options.output_file) {
-        char bare_name[strlen(orig_file_name) - strlen(orig_file_ext) + 1];
-        char new_name[strlen(options.input_file) + strlen(options.output_file_suffix)];
-        g_info("Output file not supplied; using suffix '%s'", options.output_file_suffix);
-        g_strlcpy(bare_name, orig_file_name, sizeof(bare_name));
-        g_debug("Filename without ext: %s", bare_name);
-        g_info("File extension: %s", orig_file_ext);
-        sprintf(new_name, "%s%s%s", bare_name, options.output_file_suffix, orig_file_ext);
-        g_info("New filename: %s", new_name);
-        // options.output_file = new_name;
-    }
 
     in_width = vips_image_get_width(in);
     in_height = vips_image_get_height(in);
     g_info("Input dims: %d x %d", in_width, in_height);
 
-    if (options.pct_scale) {
+    if (opts->pct_scale) {
         g_info("Scaling image");
-        if (vips_resize(in, &out, options.pct_scale, NULL)) {
+        if (vips_resize(in, &out, opts->pct_scale, NULL)) {
             vips_error_exit(NULL);
         }
     }
@@ -249,14 +252,18 @@ main(int argc, char** argv)
            "Output file:       %s\n"
            "Output width:      %d\n"
            "Output height:     %d\n",
-           options.no_op ? "***Display results only***\n" : "", orig_file_name, in_width, in_height,
-           options.output_file, out_width, out_height);
+           opts->no_op ? "***Display results only***\n" : "", orig_file_name, in_width, in_height,
+           opts->output_file, out_width, out_height);
 
     g_object_unref(in);
 
-    if (!options.no_op) {
-        if (vips_image_write_to_file(out, options.output_file, NULL)) {
-            vips_error_exit(NULL);
+    if (!opts->no_op) {
+        if (opts->output_file) {
+            if (vips_image_write_to_file(out, opts->output_file, NULL)) {
+                vips_error_exit(NULL);
+            }
+        } else {
+            fprintf(stderr, "error: output file not written. Invalid output file name.\n");
         }
     }
 

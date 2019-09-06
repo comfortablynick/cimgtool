@@ -7,7 +7,7 @@ UseTab: Never
 AlwaysBreakAfterDefinitionReturnType: None
 AlwaysBreakAfterReturnType: TopLevelDefinitions
 MaxEmptyLinesToKeep: 2
-PointerAlignment: Left
+PointerAlignment: Right
 SortIncludes: true
 AllowShortFunctionsOnASingleLine: true
 AllowShortIfStatementsOnASingleLine: true
