@@ -173,29 +173,6 @@ humanize_bytes(size_t bytes_raw)
     return s;
 }
 
-/* static char *
-resize(char *in_buf, size_t in_buf_size, size_t *out_buf_size, int width, int height)
-{
-    // int width = 1024;
-    // int height = 1024;
-
-    VipsImage *image_out;
-    void *out_buf;
-
-    if (vips_thumbnail_buffer(in_buf, in_buf_size, &image_out, width, "height", height, NULL))
-        return NULL;
-
-    if (vips_image_write_to_buffer(image_out, ".jpg", &out_buf, out_buf_size, NULL)) {
-        g_object_unref(image_out);
-        return NULL;
-    }
-    // out_width = vips_image_get_width(image_out);
-    // out_height = vips_image_get_height(image_out);
-
-    g_object_unref(image_out);
-
-    return out_buf;
-} */
 void
 get_new_filename(options_t *opts)
 {
@@ -211,7 +188,7 @@ get_new_filename(options_t *opts)
     g_info("File extension: %s", orig_file_ext);
 
     // Assign new filename to opts struct
-    opts->output_file = malloc(strlen(opts->input_file) + strlen(opts->output_file_suffix));
+    opts->output_file = (char *)malloc(strlen(opts->input_file) + strlen(opts->output_file_suffix));
     sprintf(opts->output_file, "%s%s%s", bare_name, opts->output_file_suffix, orig_file_ext);
     g_info("New filename: %s", opts->output_file);
 }
@@ -227,9 +204,11 @@ main(int argc, char **argv)
     int out_height = 0;
     char *in_size_human = NULL;
     char *out_size_human = NULL;
+    char *size_delta_human = NULL;
     char *in_buf;
     size_t in_buf_size = 0;
     size_t out_buf_size = 0;
+    size_t size_delta = 0;
     void *out_buf;
 
     // Init command line options
@@ -245,6 +224,7 @@ main(int argc, char **argv)
 
     if (parse_args(argc, argv, opts)) {
         fprintf(stderr, "%s: error parsing command-line arguments", argv[0]);
+        free(opts);
         return 1;
     }
 
@@ -304,11 +284,6 @@ main(int argc, char **argv)
     }
 
     // Get original image details
-    // g_debug("Loading %s as vips image", opts->input_file);
-    // if (!(image_in = vips_image_new_from_file(opts->input_file, NULL))) {
-    //     vips_error_exit("Unable to read file '%s' into vips image", opts->input_file);
-    // }
-
     // Create vips image from buffer to get image metadata
     g_debug("Getting vips image from buffer");
     if (!(image_in = vips_image_new_from_buffer(in_buf, in_buf_size, NULL, NULL))) {
@@ -322,9 +297,6 @@ main(int argc, char **argv)
     }
 
     // transform image
-    // if (vips_thumbnail_image(image_in, &image_out, opts->width, "height", opts->height, NULL)) {
-    //     vips_error_exit("error creating thumbnail from image '%s'", opts->input_file);
-    // }
     if (vips_thumbnail_buffer(in_buf, in_buf_size, &image_out, opts->width, "height", opts->height,
                               NULL)) {
         vips_error_exit("error creating thumbnail");
@@ -335,8 +307,10 @@ main(int argc, char **argv)
         vips_error_exit("error creating thumbnail");
     }
 
+    size_delta = in_buf_size - out_buf_size;
     in_size_human = humanize_bytes(in_buf_size);
     out_size_human = humanize_bytes(out_buf_size);
+    size_delta_human = humanize_bytes(size_delta);
 
     in_width = vips_image_get_width(image_in);
     in_height = vips_image_get_height(image_in);
@@ -344,7 +318,6 @@ main(int argc, char **argv)
     out_height = vips_image_get_height(image_out);
 
     g_debug("Input file size: %lu", in_buf_size);
-    g_info("Input file size human: %s", in_size_human);
 
     printf("%s"
            "Input file:        %s\n"
@@ -355,15 +328,17 @@ main(int argc, char **argv)
            "Output file:       %s\n"
            "Output width:      %d\n"
            "Output height:     %d\n"
-           "Output file size:  %s\n",
+           "Output file size:  %s\n"
+           "\n"
+           "Size reduction:    %s\n",
            opts->no_op ? "***Display results only***\n" : "", opts->input_file, in_width, in_height,
-           in_size_human, opts->output_file, out_width, out_height, out_size_human);
+           in_size_human, opts->output_file, out_width, out_height, out_size_human,
+           size_delta_human);
 
 
     if (!opts->no_op) {
         if (opts->output_file) {
             if (!g_file_set_contents(opts->output_file, out_buf, out_buf_size, NULL)) {
-                // if (vips_image_write_to_file(image_out, opts->output_file, NULL)) {
                 vips_error_exit("error writing '%s'", opts->output_file);
             }
         } else {
@@ -371,12 +346,15 @@ main(int argc, char **argv)
         }
     }
 
+    free(in_size_human);
+    free(out_size_human);
+    free(size_delta_human);
+
     g_free(in_buf);
     g_free(out_buf);
     g_object_unref(image_out);
     g_object_unref(image_in);
     free(opts);
-    free(in_size_human);
 
     vips_shutdown();
 }
