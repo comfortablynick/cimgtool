@@ -173,19 +173,64 @@ humanize_bytes(size_t bytes_raw)
     return s;
 }
 
+/* static char *
+resize(char *in_buf, size_t in_buf_size, size_t *out_buf_size, int width, int height)
+{
+    // int width = 1024;
+    // int height = 1024;
+
+    VipsImage *image_out;
+    void *out_buf;
+
+    if (vips_thumbnail_buffer(in_buf, in_buf_size, &image_out, width, "height", height, NULL))
+        return NULL;
+
+    if (vips_image_write_to_buffer(image_out, ".jpg", &out_buf, out_buf_size, NULL)) {
+        g_object_unref(image_out);
+        return NULL;
+    }
+    // out_width = vips_image_get_width(image_out);
+    // out_height = vips_image_get_height(image_out);
+
+    g_object_unref(image_out);
+
+    return out_buf;
+} */
+void
+get_new_filename(options_t *opts)
+{
+    char *orig_file_name = NULL;
+    char orig_file_ext[8];
+
+    orig_file_name = g_path_get_basename(opts->input_file);
+    g_strlcpy(orig_file_ext, strrchr(orig_file_name, '.'), strlen(orig_file_ext));
+    char bare_name[strlen(orig_file_name) - strlen(orig_file_ext) + 1];
+    g_info("Output file not supplied; using suffix '%s'", opts->output_file_suffix);
+    g_strlcpy(bare_name, orig_file_name, sizeof(bare_name));
+    g_debug("Filename without ext: %s", bare_name);
+    g_info("File extension: %s", orig_file_ext);
+
+    // Assign new filename to opts struct
+    opts->output_file = malloc(strlen(opts->input_file) + strlen(opts->output_file_suffix));
+    sprintf(opts->output_file, "%s%s%s", bare_name, opts->output_file_suffix, orig_file_ext);
+    g_info("New filename: %s", opts->output_file);
+}
+
 int
 main(int argc, char **argv)
 {
-    VipsImage *in = NULL;
-    VipsImage *out = NULL;
-    char *orig_file_name = NULL;
-    char orig_file_ext[8];
+    VipsImage *image_in = NULL;
+    VipsImage *image_out = NULL;
     int in_width = 0;
     int in_height = 0;
     int out_width = 0;
     int out_height = 0;
-    size_t in_size = 0;
     char *in_size_human = NULL;
+    char *out_size_human = NULL;
+    char *in_buf;
+    size_t in_buf_size = 0;
+    size_t out_buf_size = 0;
+    void *out_buf;
 
     // Init command line options
     options_t *opts = malloc(sizeof(options_t));
@@ -227,22 +272,10 @@ main(int argc, char **argv)
     // Deal with positional options
     opts->input_file = argv[optind++];
     opts->output_file = argv[optind++];
-    orig_file_name = g_path_get_basename(opts->input_file);
-    g_strlcpy(orig_file_ext, strrchr(orig_file_name, '.'), sizeof(orig_file_ext));
 
     if (!opts->output_file) {
-        char bare_name[strlen(orig_file_name) - strlen(orig_file_ext) + 1];
-        g_info("Output file not supplied; using suffix '%s'", opts->output_file_suffix);
-        g_strlcpy(bare_name, orig_file_name, sizeof(bare_name));
-        g_debug("Filename without ext: %s", bare_name);
-        g_info("File extension: %s", orig_file_ext);
-
-        // Assign new filename to opts struct
-        opts->output_file = malloc(strlen(opts->input_file) + strlen(opts->output_file_suffix));
-        sprintf(opts->output_file, "%s%s%s", bare_name, opts->output_file_suffix, orig_file_ext);
-        g_info("New filename: %s", opts->output_file);
+        get_new_filename(opts);
     }
-
 
     // Debug print for options
     if (opts->verbosity > 1) {
@@ -250,7 +283,6 @@ main(int argc, char **argv)
         print_options_t(buf, sizeof(buf), opts);
         g_debug("%s", buf);
     }
-
     if (optind < argc) {
         g_info("Additional non-option ARGV-elements: ");
         while (optind < argc) {
@@ -265,54 +297,86 @@ main(int argc, char **argv)
     if (VIPS_INIT(argv[0])) {
         vips_error_exit("Unable to start VIPS");
     }
-    if (!(in = vips_image_new_from_file(opts->input_file, NULL))) {
-        vips_error_exit(NULL);
+
+    g_debug("Reading %s into buffer", opts->input_file);
+    if (!g_file_get_contents(opts->input_file, &in_buf, &in_buf_size, NULL)) {
+        vips_error_exit("error getting file %s", opts->input_file);
     }
 
+    // Get original image details
+    // g_debug("Loading %s as vips image", opts->input_file);
+    // if (!(image_in = vips_image_new_from_file(opts->input_file, NULL))) {
+    //     vips_error_exit("Unable to read file '%s' into vips image", opts->input_file);
+    // }
 
-    in_width = vips_image_get_width(in);
-    in_height = vips_image_get_height(in);
-    in_size = sizeof(*in);
-    in_size_human = humanize_bytes(in_size);
-    g_info("Input dims: %d x %d", in_width, in_height);
-    g_debug("Input file size: %lu", in_size);
-    g_info("Input file size human: %s", in_size_human);
+    // Create vips image from buffer to get image metadata
+    g_debug("Getting vips image from buffer");
+    if (!(image_in = vips_image_new_from_buffer(in_buf, in_buf_size, NULL, NULL))) {
+        vips_error_exit("error getting vips image from buffer");
+    }
 
     if (opts->pct_scale) {
         g_info("Scaling image");
-        if (vips_resize(in, &out, opts->pct_scale, NULL)) {
-            vips_error_exit(NULL);
-        }
+        opts->width = opts->pct_scale * in_width;
+        opts->height = opts->pct_scale * in_height;
     }
 
-    out_width = vips_image_get_width(out);
-    out_height = vips_image_get_height(out);
+    // transform image
+    // if (vips_thumbnail_image(image_in, &image_out, opts->width, "height", opts->height, NULL)) {
+    //     vips_error_exit("error creating thumbnail from image '%s'", opts->input_file);
+    // }
+    if (vips_thumbnail_buffer(in_buf, in_buf_size, &image_out, opts->width, "height", opts->height,
+                              NULL)) {
+        vips_error_exit("error creating thumbnail");
+    }
+
+    if (vips_image_write_to_buffer(image_out, ".jpg", &out_buf, &out_buf_size, NULL)) {
+        g_object_unref(image_out);
+        vips_error_exit("error creating thumbnail");
+    }
+
+    in_size_human = humanize_bytes(in_buf_size);
+    out_size_human = humanize_bytes(out_buf_size);
+
+    in_width = vips_image_get_width(image_in);
+    in_height = vips_image_get_height(image_in);
+    out_width = vips_image_get_width(image_out);
+    out_height = vips_image_get_height(image_out);
+
+    g_debug("Input file size: %lu", in_buf_size);
+    g_info("Input file size human: %s", in_size_human);
 
     printf("%s"
            "Input file:        %s\n"
            "Input width:       %d\n"
            "Input height:      %d\n"
+           "Input file size:   %s\n"
            "\n"
            "Output file:       %s\n"
            "Output width:      %d\n"
-           "Output height:     %d\n",
-           opts->no_op ? "***Display results only***\n" : "", orig_file_name, in_width, in_height,
-           opts->output_file, out_width, out_height);
+           "Output height:     %d\n"
+           "Output file size:  %s\n",
+           opts->no_op ? "***Display results only***\n" : "", opts->input_file, in_width, in_height,
+           in_size_human, opts->output_file, out_width, out_height, out_size_human);
 
-    g_object_unref(in);
 
     if (!opts->no_op) {
         if (opts->output_file) {
-            if (vips_image_write_to_file(out, opts->output_file, NULL)) {
-                vips_error_exit(NULL);
+            if (!g_file_set_contents(opts->output_file, out_buf, out_buf_size, NULL)) {
+                // if (vips_image_write_to_file(image_out, opts->output_file, NULL)) {
+                vips_error_exit("error writing '%s'", opts->output_file);
             }
         } else {
             fprintf(stderr, "error: output file not written. Invalid output file name.\n");
         }
     }
 
+    g_free(in_buf);
+    g_free(out_buf);
+    g_object_unref(image_out);
+    g_object_unref(image_in);
     free(opts);
-    free(opts->output_file);
     free(in_size_human);
-    g_object_unref(out);
+
+    vips_shutdown();
 }
