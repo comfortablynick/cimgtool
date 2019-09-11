@@ -26,12 +26,9 @@ install: build
         if [[ ! -e compile_commands.json ]]; then
             echo "linking build/compile_commands.json to top dir..."
             ln -s build/compile_commands.json ./
-        else
-            echo "compile_commands.json already linked to top of project"
-        fi
-    else
-        echo "no compile_commands.json in build directory"
-    fi #sh
+        fi 
+    fi 
+    just run #sh
 
 run:
-    ./build/{{bin_name}}
+    ./build/{{bin_name}} ./test/chin_class.jpg ./test/chin_class_edited.jpg -p 50 -vv -n
