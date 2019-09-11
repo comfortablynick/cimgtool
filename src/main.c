@@ -222,6 +222,15 @@ get_new_filename(options_t *opts)
     sprintf(opts->output_file, "%s%s%s", bare_name, opts->output_file_suffix, opts->file_extension);
 }
 
+void
+add_watermark_text(VipsImage *out, VipsImage *watermark, char *text, options_t *opts)
+{
+    if (!vips_text(&watermark, text, "width", opts->width, "dpi", 300, NULL)) {
+        g_error("error creating watermark text '%s'", text);
+    }
+    vips_embed(watermark, &out, 25, 25, opts->width, opts->height, NULL);
+}
+
 int
 main(int argc, char **argv)
 {
@@ -313,6 +322,14 @@ main(int argc, char **argv)
         print_options_t(buf, sizeof(buf), opts);
         g_debug("%s", buf);
     }
+
+    VipsImage *watermark = NULL;
+    VipsImage *final = NULL;
+    watermark = vips_image_new();
+    final = vips_image_new();
+
+    add_watermark_text(final, watermark, "(c) 2019 Nick Murphy", opts);
+    vips_composite2(final, watermark, &image_in, VIPS_BLEND_MODE_OVER, NULL);
 
     // transform image
     if (vips_thumbnail_buffer(in_buf, in_buf_size, &image_out, opts->width, "height", opts->height,
