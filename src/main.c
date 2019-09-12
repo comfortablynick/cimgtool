@@ -148,7 +148,7 @@ parse_args(int argc, char **argv, options_t *options)
  *
  * @return char *
  */
-/* static char *
+static char *
 humanize_bytes(size_t bytes_raw)
 {
     static const char units[] = {
@@ -181,7 +181,7 @@ humanize_bytes(size_t bytes_raw)
     // return yottabytes
     sprintf(s, "%.1f%c%c", bytes, 'Y', suffix);
     return s;
-} */
+}
 
 void
 init_log(options_t *opts)
@@ -264,35 +264,42 @@ label_image(VipsObject *base, VipsImage *in, VipsImage **out, const char *messag
     VipsImage **t = (VipsImage **)vips_object_local_array(base, 10);
     static double background[3] = {255, 255, 255};
     static double ones[3] = {1, 1, 1};
+    int i = 0;
+    int replicate = 0;
 
-    /* Make the mask.
-     */
-    if (vips_text(&t[0], message, "width", in->Xsize, "dpi", 300, NULL) ||
-        vips_linear1(t[0], &t[1], 0.3, 0.0, NULL) ||
-        vips_cast(t[1], &t[2], VIPS_FORMAT_UCHAR, NULL) ||
-        vips_embed(t[2], &t[3], 100, 100, t[2]->Xsize + 200, t[2]->Ysize + 200, NULL) ||
-        // vips_replicate(t[3], &t[4], 1 + in->Xsize / t[3]->Xsize, 1 + in->Ysize / t[3]->Ysize,
-        //                NULL) ||
-        vips_replicate(t[3], &t[4], 1 + in->Xsize / t[3]->Xsize, 1 + in->Ysize / t[3]->Ysize,
-                       NULL) ||
-        vips_crop(t[3], &t[5], 0, 0, in->Xsize, in->Ysize, NULL)) {
+    // Make the mask
+    if (vips_text(&t[i + 0], message, "dpi", 300, NULL) ||
+        vips_linear1(t[i + 0], &t[i + 1], 0.7, 0.0, NULL) ||
+        vips_cast(t[i + 1], &t[i + 2], VIPS_FORMAT_UCHAR, NULL) ||
+        vips_embed(t[i + 2], &t[i + 3], 25, 25, t[i + 2]->Xsize + 200, t[i + 2]->Ysize + 200,
+                   NULL)) {
+        g_object_unref(base);
+        vips_error_exit(NULL);
+    }
+    // TODO: why doesn't this work?
+    if (replicate) {
+        if (vips_replicate(t[i + 3], &t[i + 4], 1 + in->Xsize / t[i + 3]->Xsize,
+                           1 + in->Ysize / t[i + 3]->Ysize, NULL) ||
+            vips_crop(t[i + 3], &t[i + 4], 0, 0, in->Xsize, in->Ysize, NULL)) {
+            g_object_unref(base);
+            vips_error_exit(NULL);
+        }
+        ++i;
+    }
+
+    // Make the constant image to paint the text with.
+    if (vips_black(&t[i + 4], 1, 1, NULL) ||
+        vips_linear(t[i + 4], &t[i + 5], ones, background, 3, NULL) ||
+        vips_cast(t[i + 5], &t[i + 6], VIPS_FORMAT_UCHAR, NULL) ||
+        vips_copy(t[i + 6], &t[i + 7], "interpretation", in->Type, NULL) ||
+        vips_embed(t[i + 7], &t[i + 8], 0, 0, in->Xsize, in->Ysize, "extend", VIPS_EXTEND_COPY,
+                   NULL)) {
         g_object_unref(base);
         vips_error_exit(NULL);
     }
 
-    /* Make the constant image to paint the text with.
-     */
-    if (vips_black(&t[6], 1, 1, NULL) || vips_linear(t[6], &t[7], ones, background, 3, NULL) ||
-        vips_cast(t[7], &t[8], VIPS_FORMAT_UCHAR, NULL) ||
-        vips_copy(t[8], &t[9], "interpretation", in->Type, NULL) ||
-        vips_embed(t[9], &t[10], 0, 0, in->Xsize, in->Ysize, "extend", VIPS_EXTEND_COPY, NULL)) {
-        g_object_unref(base);
-        vips_error_exit(NULL);
-    }
-
-    /* Blend the mask and text and write to output.
-     */
-    if (vips_ifthenelse(t[5], t[10], in, out, "blend", TRUE, NULL)) return (-1);
+    // Blend the mask and text and write to output.
+    if (vips_ifthenelse(t[i + 3], t[i + 8], in, out, "blend", TRUE, NULL)) return (-1);
     return (0);
 }
 
@@ -301,22 +308,20 @@ main(int argc, char **argv)
 {
     VipsObject *base;
     VipsImage **t;
-    // VipsImage *image_in = NULL;
-    // VipsImage *image_out = NULL;
-    // int in_width = 0;
-    // int in_height = 0;
-    // int out_width = 0;
-    // int out_height = 0;
+    int in_width = 0;
+    int in_height = 0;
+    int out_width = 0;
+    int out_height = 0;
     const char *watermark_text = "© 2019 Nick Murphy | murphpix.com";
-    // char *in_size_human = NULL;
-    // char *out_size_human = NULL;
-    // char *size_delta_human = NULL;
+    char *in_size_human = NULL;
+    char *out_size_human = NULL;
+    char *size_delta_human = NULL;
     // char *in_buf;
-    // size_t in_buf_size = 0;
-    // size_t out_buf_size = 0;
-    // size_t size_delta = 0;
+    size_t in_buf_size = 0;
+    size_t out_buf_size = 0;
+    size_t size_delta = 0;
     // void *out_buf;
-    // char encode_opts[12];
+    char encode_opts[12];
 
     // Init command line options
     options_t *opts = malloc(sizeof(options_t));
@@ -340,7 +345,7 @@ main(int argc, char **argv)
     init_log(opts);
 
     base = (VipsObject *)vips_image_new();
-    t = (VipsImage **)vips_object_local_array(VIPS_OBJECT(base), 3);
+    t = (VipsImage **)vips_object_local_array(VIPS_OBJECT(base), 4);
 
     // Deal with positional options
     opts->input_file = argv[optind++];
@@ -378,14 +383,20 @@ main(int argc, char **argv)
     //     vips_error_exit("error getting vips image from buffer");
     // }
 
-    // in_width = vips_image_get_width(image_in);
-    // in_height = vips_image_get_height(image_in);
+    // Get image
+    if (!(t[0] =
+              vips_image_new_from_file(opts->input_file, "access", VIPS_ACCESS_SEQUENTIAL, NULL))) {
+        g_object_unref(base);
+        vips_error_exit("error creating image from file");
+    }
+    in_width = vips_image_get_width(t[0]);
+    in_height = vips_image_get_height(t[0]);
 
-    // if (opts->pct_scale) {
-    //     g_info("Scaling image");
-    //     opts->width = opts->pct_scale * in_width;
-    //     opts->height = opts->pct_scale * in_height;
-    // }
+    if (opts->pct_scale) {
+        g_info("Scaling image");
+        opts->width = opts->pct_scale * in_width;
+        opts->height = opts->pct_scale * in_height;
+    }
 
     // Debug print for options
     if (opts->verbosity > 1) {
@@ -394,13 +405,25 @@ main(int argc, char **argv)
         g_debug("%s", buf);
     }
 
-    // transform image
-    if (!(t[0] =
-              vips_image_new_from_file(opts->input_file, "access", VIPS_ACCESS_SEQUENTIAL, NULL)) ||
-        label_image(base, t[0], &t[1], watermark_text) ||
-        vips_image_write_to_file(t[1], opts->output_file, NULL)) {
+    // Watermark image
+    if (label_image(base, t[0], &t[1], watermark_text)) {
         g_object_unref(base);
-        vips_error_exit(NULL);
+        vips_error_exit("error adding watermark to image");
+    }
+
+    // Transform image
+    if (vips_thumbnail_image(t[1], &t[2], opts->width, "height", opts->height, NULL)) {
+        g_object_unref(base);
+        vips_error_exit("error creating thumbnail");
+    }
+
+    out_width = vips_image_get_width(t[2]);
+    out_height = vips_image_get_height(t[2]);
+
+    // Write image
+    if (vips_image_write_to_file(t[2], opts->output_file, NULL)) {
+        g_object_unref(base);
+        vips_error_exit("error writing file");
     }
 
     // if (vips_thumbnail_buffer(in_buf, in_buf_size, &image_out, opts->width, "height",
@@ -409,31 +432,19 @@ main(int argc, char **argv)
     //     vips_error_exit("error creating thumbnail");
     // }
 
-    // VipsImage *watermark = NULL;
-    // VipsImage *watermark_alpha = NULL;
-    // VipsImage *final = NULL;
-
-    // vips_text(&watermark, "(c) 2019 Nick Murphy", "width", 2000, "dpi", 300, NULL);
-    // vips_extract_band(watermark, &watermark_alpha, watermark->Bands - 1, NULL);
-    // vips_composite2(image_out, watermark, &final, VIPS_BLEND_MODE_OVER, NULL);
-
-
-    // snprintf(encode_opts, sizeof(encode_opts), "%s[Q=%d]", opts->file_extension, opts->quality);
+    snprintf(encode_opts, sizeof(encode_opts), "%s[Q=%d]", opts->file_extension, opts->quality);
     // g_debug("Writing to buffer with suffix: %s", encode_opts);
     // if (vips_image_write_to_buffer(final, encode_opts, &out_buf, &out_buf_size, NULL)) {
     //     g_object_unref(final);
     //     vips_error_exit("error creating thumbnail");
     // }
 
-    // size_delta = in_buf_size - out_buf_size;
-    // in_size_human = humanize_bytes(in_buf_size);
-    // out_size_human = humanize_bytes(out_buf_size);
-    // size_delta_human = humanize_bytes(size_delta);
-    //
-    // out_width = vips_image_get_width(image_out);
-    // out_height = vips_image_get_height(image_out);
+    size_delta = in_buf_size - out_buf_size;
+    in_size_human = humanize_bytes(in_buf_size);
+    out_size_human = humanize_bytes(out_buf_size);
+    size_delta_human = humanize_bytes(size_delta);
 
-    /* printf("%s"
+    printf("%s"
            "Input file:        %s\n"
            "Input width:       %d\n"
            "Input height:      %d\n"
@@ -447,7 +458,7 @@ main(int argc, char **argv)
            "Size reduction:    %s\n",
            opts->no_op ? "***Display results only***\n" : "", opts->input_file, in_width, in_height,
            in_size_human, opts->output_file, out_width, out_height, out_size_human,
-           size_delta_human); */
+           size_delta_human);
 
     // if (!opts->no_op) {
     //     if (opts->output_file) {
