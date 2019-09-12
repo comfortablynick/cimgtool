@@ -148,7 +148,7 @@ parse_args(int argc, char **argv, options_t *options)
  *
  * @return char *
  */
-static char *
+/* static char *
 humanize_bytes(size_t bytes_raw)
 {
     static const char units[] = {
@@ -181,7 +181,7 @@ humanize_bytes(size_t bytes_raw)
     // return yottabytes
     sprintf(s, "%.1f%c%c", bytes, 'Y', suffix);
     return s;
-}
+} */
 
 void
 init_log(options_t *opts)
@@ -222,24 +222,101 @@ get_new_filename(options_t *opts)
     sprintf(opts->output_file, "%s%s%s", bare_name, opts->output_file_suffix, opts->file_extension);
 }
 
+/* static int
+label_image(VipsObject *base, VipsImage *in, VipsImage **out, const char *message)
+{
+    static double background[3] = {255, 255, 255};
+    static double ones[3] = {1, 1, 1};
+    int x_pos = 25;
+    int y_pos = 25;
+
+    VipsImage **t = (VipsImage **)vips_object_local_array(base, 10);
+
+    [>Make the text mask.
+    <]
+    if (vips_text(&t[0], message, "width", in->Xsize, "dpi", 300, NULL)) return (-1);
+
+    [>Make the constant image to paint the text with. We make a 1x1
+     * black image, then add the colour and cast it to match in. Then
+     * expand it to match in in size.
+    <]
+    if (vips_black(&t[1], 1, 1, NULL) || vips_linear(t[1], &t[2], ones, background, 3, NULL) ||
+        vips_cast(t[2], &t[3], in->BandFmt, NULL) ||
+        vips_embed(t[3], &t[4], 0, 0, in->Xsize, in->Ysize, "extend", VIPS_EXTEND_COPY, NULL) ||
+        vips_copy(t[4], &t[5], "interpretation", VIPS_INTERPRETATION_sRGB, NULL))
+        return (-1);
+
+    [>Use the text mask to blend between the source image and the
+     * constant white image. The text will be
+     * smaller than the image (usually), so vips will expand the text to
+     * match the image with 0 along the bottom and right. If you want
+     * another alignment, use vips_embed() to expand the text mask
+     * yourself.
+    <]
+    if (vips_ifthenelse(t[0], t[5], in, out, "blend", TRUE, NULL)) return (-1);
+
+    return (0);
+} */
+
+static int
+label_image(VipsObject *base, VipsImage *in, VipsImage **out, const char *message)
+{
+    VipsImage **t = (VipsImage **)vips_object_local_array(base, 10);
+    static double background[3] = {255, 255, 255};
+    static double ones[3] = {1, 1, 1};
+
+    /* Make the mask.
+     */
+    if (vips_text(&t[0], message, "width", in->Xsize, "dpi", 300, NULL) ||
+        vips_linear1(t[0], &t[1], 0.3, 0.0, NULL) ||
+        vips_cast(t[1], &t[2], VIPS_FORMAT_UCHAR, NULL) ||
+        vips_embed(t[2], &t[3], 100, 100, t[2]->Xsize + 200, t[2]->Ysize + 200, NULL) ||
+        // vips_replicate(t[3], &t[4], 1 + in->Xsize / t[3]->Xsize, 1 + in->Ysize / t[3]->Ysize,
+        //                NULL) ||
+        vips_replicate(t[3], &t[4], 1 + in->Xsize / t[3]->Xsize, 1 + in->Ysize / t[3]->Ysize,
+                       NULL) ||
+        vips_crop(t[3], &t[5], 0, 0, in->Xsize, in->Ysize, NULL)) {
+        g_object_unref(base);
+        vips_error_exit(NULL);
+    }
+
+    /* Make the constant image to paint the text with.
+     */
+    if (vips_black(&t[6], 1, 1, NULL) || vips_linear(t[6], &t[7], ones, background, 3, NULL) ||
+        vips_cast(t[7], &t[8], VIPS_FORMAT_UCHAR, NULL) ||
+        vips_copy(t[8], &t[9], "interpretation", in->Type, NULL) ||
+        vips_embed(t[9], &t[10], 0, 0, in->Xsize, in->Ysize, "extend", VIPS_EXTEND_COPY, NULL)) {
+        g_object_unref(base);
+        vips_error_exit(NULL);
+    }
+
+    /* Blend the mask and text and write to output.
+     */
+    if (vips_ifthenelse(t[5], t[10], in, out, "blend", TRUE, NULL)) return (-1);
+    return (0);
+}
+
 int
 main(int argc, char **argv)
 {
-    VipsImage *image_in = NULL;
-    VipsImage *image_out = NULL;
-    int in_width = 0;
-    int in_height = 0;
-    int out_width = 0;
-    int out_height = 0;
-    char *in_size_human = NULL;
-    char *out_size_human = NULL;
-    char *size_delta_human = NULL;
-    char *in_buf;
-    size_t in_buf_size = 0;
-    size_t out_buf_size = 0;
-    size_t size_delta = 0;
-    void *out_buf;
-    char encode_opts[12];
+    VipsObject *base;
+    VipsImage **t;
+    // VipsImage *image_in = NULL;
+    // VipsImage *image_out = NULL;
+    // int in_width = 0;
+    // int in_height = 0;
+    // int out_width = 0;
+    // int out_height = 0;
+    const char *watermark_text = "© 2019 Nick Murphy | murphpix.com";
+    // char *in_size_human = NULL;
+    // char *out_size_human = NULL;
+    // char *size_delta_human = NULL;
+    // char *in_buf;
+    // size_t in_buf_size = 0;
+    // size_t out_buf_size = 0;
+    // size_t size_delta = 0;
+    // void *out_buf;
+    // char encode_opts[12];
 
     // Init command line options
     options_t *opts = malloc(sizeof(options_t));
@@ -261,6 +338,9 @@ main(int argc, char **argv)
     }
 
     init_log(opts);
+
+    base = (VipsObject *)vips_image_new();
+    t = (VipsImage **)vips_object_local_array(VIPS_OBJECT(base), 3);
 
     // Deal with positional options
     opts->input_file = argv[optind++];
@@ -286,26 +366,26 @@ main(int argc, char **argv)
         vips_error_exit("Unable to start VIPS");
     }
 
-    g_debug("Reading %s into buffer", opts->input_file);
-    if (!g_file_get_contents(opts->input_file, &in_buf, &in_buf_size, NULL)) {
-        vips_error_exit("error getting file %s", opts->input_file);
-    }
+    // g_debug("Reading %s into buffer", opts->input_file);
+    // if (!g_file_get_contents(opts->input_file, &in_buf, &in_buf_size, NULL)) {
+    //     vips_error_exit("error getting file %s", opts->input_file);
+    // }
 
     // Get original image details
     // Create vips image from buffer to get image metadata
-    g_debug("Getting vips image from buffer");
-    if (!(image_in = vips_image_new_from_buffer(in_buf, in_buf_size, NULL, NULL))) {
-        vips_error_exit("error getting vips image from buffer");
-    }
+    // g_debug("Getting vips image from buffer");
+    // if (!(image_in = vips_image_new_from_buffer(in_buf, in_buf_size, NULL, NULL))) {
+    //     vips_error_exit("error getting vips image from buffer");
+    // }
 
-    in_width = vips_image_get_width(image_in);
-    in_height = vips_image_get_height(image_in);
+    // in_width = vips_image_get_width(image_in);
+    // in_height = vips_image_get_height(image_in);
 
-    if (opts->pct_scale) {
-        g_info("Scaling image");
-        opts->width = opts->pct_scale * in_width;
-        opts->height = opts->pct_scale * in_height;
-    }
+    // if (opts->pct_scale) {
+    //     g_info("Scaling image");
+    //     opts->width = opts->pct_scale * in_width;
+    //     opts->height = opts->pct_scale * in_height;
+    // }
 
     // Debug print for options
     if (opts->verbosity > 1) {
@@ -315,35 +395,45 @@ main(int argc, char **argv)
     }
 
     // transform image
-    if (vips_thumbnail_buffer(in_buf, in_buf_size, &image_out, opts->width, "height", opts->height,
-                              NULL)) {
-        vips_error_exit("error creating thumbnail");
+    if (!(t[0] =
+              vips_image_new_from_file(opts->input_file, "access", VIPS_ACCESS_SEQUENTIAL, NULL)) ||
+        label_image(base, t[0], &t[1], watermark_text) ||
+        vips_image_write_to_file(t[1], opts->output_file, NULL)) {
+        g_object_unref(base);
+        vips_error_exit(NULL);
     }
 
-    VipsImage *watermark = NULL;
-    VipsImage *watermark_alpha = NULL;
-    VipsImage *final = NULL;
+    // if (vips_thumbnail_buffer(in_buf, in_buf_size, &image_out, opts->width, "height",
+    // opts->height,
+    //                           NULL)) {
+    //     vips_error_exit("error creating thumbnail");
+    // }
 
-    vips_text(&watermark, "(c) 2019 Nick Murphy", "width", 200, "dpi", 300, NULL);
-    vips_extract_band(watermark, &watermark_alpha, watermark->Bands - 1, NULL);
-    vips_composite2(image_out, watermark, &final, VIPS_BLEND_MODE_OVER, NULL);
+    // VipsImage *watermark = NULL;
+    // VipsImage *watermark_alpha = NULL;
+    // VipsImage *final = NULL;
 
-    snprintf(encode_opts, sizeof(encode_opts), "%s[Q=%d]", opts->file_extension, opts->quality);
-    g_debug("Writing to buffer with suffix: %s", encode_opts);
-    if (vips_image_write_to_buffer(final, encode_opts, &out_buf, &out_buf_size, NULL)) {
-        g_object_unref(final);
-        vips_error_exit("error creating thumbnail");
-    }
+    // vips_text(&watermark, "(c) 2019 Nick Murphy", "width", 2000, "dpi", 300, NULL);
+    // vips_extract_band(watermark, &watermark_alpha, watermark->Bands - 1, NULL);
+    // vips_composite2(image_out, watermark, &final, VIPS_BLEND_MODE_OVER, NULL);
 
-    size_delta = in_buf_size - out_buf_size;
-    in_size_human = humanize_bytes(in_buf_size);
-    out_size_human = humanize_bytes(out_buf_size);
-    size_delta_human = humanize_bytes(size_delta);
 
-    out_width = vips_image_get_width(image_out);
-    out_height = vips_image_get_height(image_out);
+    // snprintf(encode_opts, sizeof(encode_opts), "%s[Q=%d]", opts->file_extension, opts->quality);
+    // g_debug("Writing to buffer with suffix: %s", encode_opts);
+    // if (vips_image_write_to_buffer(final, encode_opts, &out_buf, &out_buf_size, NULL)) {
+    //     g_object_unref(final);
+    //     vips_error_exit("error creating thumbnail");
+    // }
 
-    printf("%s"
+    // size_delta = in_buf_size - out_buf_size;
+    // in_size_human = humanize_bytes(in_buf_size);
+    // out_size_human = humanize_bytes(out_buf_size);
+    // size_delta_human = humanize_bytes(size_delta);
+    //
+    // out_width = vips_image_get_width(image_out);
+    // out_height = vips_image_get_height(image_out);
+
+    /* printf("%s"
            "Input file:        %s\n"
            "Input width:       %d\n"
            "Input height:      %d\n"
@@ -357,26 +447,27 @@ main(int argc, char **argv)
            "Size reduction:    %s\n",
            opts->no_op ? "***Display results only***\n" : "", opts->input_file, in_width, in_height,
            in_size_human, opts->output_file, out_width, out_height, out_size_human,
-           size_delta_human);
+           size_delta_human); */
 
-    if (!opts->no_op) {
-        if (opts->output_file) {
-            if (!g_file_set_contents(opts->output_file, out_buf, out_buf_size, NULL)) {
-                vips_error_exit("error writing '%s'", opts->output_file);
-            }
-        } else {
-            fprintf(stderr, "error: output file not written. Invalid output file name.\n");
-        }
-    }
+    // if (!opts->no_op) {
+    //     if (opts->output_file) {
+    //         if (!g_file_set_contents(opts->output_file, out_buf, out_buf_size, NULL)) {
+    //             vips_error_exit("error writing '%s'", opts->output_file);
+    //         }
+    //     } else {
+    //         fprintf(stderr, "error: output file not written. Invalid output file name.\n");
+    //     }
+    // }
 
-    free(in_size_human);
-    free(out_size_human);
-    free(size_delta_human);
+    // free(in_size_human);
+    // free(out_size_human);
+    // free(size_delta_human);
 
-    g_free(in_buf);
-    g_free(out_buf);
-    g_object_unref(image_out);
-    g_object_unref(image_in);
+    // g_free(in_buf);
+    // g_free(out_buf);
+    // g_object_unref(image_out);
+    // g_object_unref(image_in);
+    g_object_unref(base);
     free(opts);
 
     vips_shutdown();
