@@ -26,9 +26,9 @@ install: build
         if [[ ! -e compile_commands.json ]]; then
             echo "linking build/compile_commands.json to top dir..."
             ln -s build/compile_commands.json ./
-        fi 
-    fi 
+        fi
+    fi
     just run #sh
 
 run:
-    ./build/{{bin_name}} ./test/chin_class.jpg ./test/chin_class_edited.jpg -p 50 -vv -n
+    ./build/{{bin_name}} ./test/sunset.jpg ./test/sunset_edited.jpg -p 50 -vv

@@ -222,42 +222,6 @@ get_new_filename(options_t *opts)
     sprintf(opts->output_file, "%s%s%s", bare_name, opts->output_file_suffix, opts->file_extension);
 }
 
-/* static int
-label_image(VipsObject *base, VipsImage *in, VipsImage **out, const char *message)
-{
-    static double background[3] = {255, 255, 255};
-    static double ones[3] = {1, 1, 1};
-    int x_pos = 25;
-    int y_pos = 25;
-
-    VipsImage **t = (VipsImage **)vips_object_local_array(base, 10);
-
-    [>Make the text mask.
-    <]
-    if (vips_text(&t[0], message, "width", in->Xsize, "dpi", 300, NULL)) return (-1);
-
-    [>Make the constant image to paint the text with. We make a 1x1
-     * black image, then add the colour and cast it to match in. Then
-     * expand it to match in in size.
-    <]
-    if (vips_black(&t[1], 1, 1, NULL) || vips_linear(t[1], &t[2], ones, background, 3, NULL) ||
-        vips_cast(t[2], &t[3], in->BandFmt, NULL) ||
-        vips_embed(t[3], &t[4], 0, 0, in->Xsize, in->Ysize, "extend", VIPS_EXTEND_COPY, NULL) ||
-        vips_copy(t[4], &t[5], "interpretation", VIPS_INTERPRETATION_sRGB, NULL))
-        return (-1);
-
-    [>Use the text mask to blend between the source image and the
-     * constant white image. The text will be
-     * smaller than the image (usually), so vips will expand the text to
-     * match the image with 0 along the bottom and right. If you want
-     * another alignment, use vips_embed() to expand the text mask
-     * yourself.
-    <]
-    if (vips_ifthenelse(t[0], t[5], in, out, "blend", TRUE, NULL)) return (-1);
-
-    return (0);
-} */
-
 static int
 label_image(VipsObject *base, VipsImage *in, VipsImage **out, const char *message)
 {
