@@ -316,11 +316,11 @@ main(int argc, char **argv)
     char *in_size_human = NULL;
     char *out_size_human = NULL;
     char *size_delta_human = NULL;
-    // char *in_buf;
+    char *in_buf;
     size_t in_buf_size = 0;
     size_t out_buf_size = 0;
     size_t size_delta = 0;
-    // void *out_buf;
+    void *out_buf;
     char encode_opts[12];
 
     // Init command line options
@@ -371,24 +371,20 @@ main(int argc, char **argv)
         vips_error_exit("Unable to start VIPS");
     }
 
-    // g_debug("Reading %s into buffer", opts->input_file);
-    // if (!g_file_get_contents(opts->input_file, &in_buf, &in_buf_size, NULL)) {
-    //     vips_error_exit("error getting file %s", opts->input_file);
-    // }
+    // Get image
+    g_debug("Reading %s into buffer", opts->input_file);
+    if (!g_file_get_contents(opts->input_file, &in_buf, &in_buf_size, NULL)) {
+        vips_error_exit("error getting file %s", opts->input_file);
+    }
 
     // Get original image details
     // Create vips image from buffer to get image metadata
-    // g_debug("Getting vips image from buffer");
-    // if (!(image_in = vips_image_new_from_buffer(in_buf, in_buf_size, NULL, NULL))) {
-    //     vips_error_exit("error getting vips image from buffer");
-    // }
-
-    // Get image
-    if (!(t[0] =
-              vips_image_new_from_file(opts->input_file, "access", VIPS_ACCESS_SEQUENTIAL, NULL))) {
+    g_debug("Getting vips image from buffer");
+    if (!(t[0] = vips_image_new_from_buffer(in_buf, in_buf_size, NULL, NULL))) {
         g_object_unref(base);
-        vips_error_exit("error creating image from file");
+        vips_error_exit("error getting vips image from buffer");
     }
+
     in_width = vips_image_get_width(t[0]);
     in_height = vips_image_get_height(t[0]);
 
@@ -419,26 +415,16 @@ main(int argc, char **argv)
 
     out_width = vips_image_get_width(t[2]);
     out_height = vips_image_get_height(t[2]);
+    snprintf(encode_opts, sizeof(encode_opts), "%s[Q=%d]", opts->file_extension, opts->quality);
 
     // Write image
-    if (vips_image_write_to_file(t[2], opts->output_file, NULL)) {
+    g_debug("Writing to buffer with suffix: %s", encode_opts);
+    if (vips_image_write_to_buffer(t[2], encode_opts, &out_buf, &out_buf_size, NULL)) {
         g_object_unref(base);
         vips_error_exit("error writing file");
     }
 
-    // if (vips_thumbnail_buffer(in_buf, in_buf_size, &image_out, opts->width, "height",
-    // opts->height,
-    //                           NULL)) {
-    //     vips_error_exit("error creating thumbnail");
-    // }
-
-    snprintf(encode_opts, sizeof(encode_opts), "%s[Q=%d]", opts->file_extension, opts->quality);
-    // g_debug("Writing to buffer with suffix: %s", encode_opts);
-    // if (vips_image_write_to_buffer(final, encode_opts, &out_buf, &out_buf_size, NULL)) {
-    //     g_object_unref(final);
-    //     vips_error_exit("error creating thumbnail");
-    // }
-
+    // Print report
     size_delta = in_buf_size - out_buf_size;
     in_size_human = humanize_bytes(in_buf_size);
     out_size_human = humanize_bytes(out_buf_size);
@@ -460,24 +446,22 @@ main(int argc, char **argv)
            in_size_human, opts->output_file, out_width, out_height, out_size_human,
            size_delta_human);
 
-    // if (!opts->no_op) {
-    //     if (opts->output_file) {
-    //         if (!g_file_set_contents(opts->output_file, out_buf, out_buf_size, NULL)) {
-    //             vips_error_exit("error writing '%s'", opts->output_file);
-    //         }
-    //     } else {
-    //         fprintf(stderr, "error: output file not written. Invalid output file name.\n");
-    //     }
-    // }
+    if (!opts->no_op) {
+        if (opts->output_file) {
+            if (!g_file_set_contents(opts->output_file, out_buf, out_buf_size, NULL)) {
+                vips_error_exit("error writing '%s'", opts->output_file);
+            }
+        } else {
+            fprintf(stderr, "error: output file not written. Invalid output file name.\n");
+        }
+    }
 
-    // free(in_size_human);
-    // free(out_size_human);
-    // free(size_delta_human);
+    free(in_size_human);
+    free(out_size_human);
+    free(size_delta_human);
 
-    // g_free(in_buf);
-    // g_free(out_buf);
-    // g_object_unref(image_out);
-    // g_object_unref(image_in);
+    g_free(in_buf);
+    g_free(out_buf);
     g_object_unref(base);
     free(opts);
 
