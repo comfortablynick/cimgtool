@@ -11,12 +11,15 @@ typedef struct _options_t
     char *output_file;
     char *output_file_suffix;
     char *file_extension;
+    char *watermark_text;
     double pct_scale;
+    double watermark_opacity;
     int width;
     int height;
     int quality;
     int verbosity;
     int no_op;
+    int watermark_replicate;
 } options_t;
 
 
@@ -62,18 +65,22 @@ print_options_t(char *buf, size_t bufsize, options_t *options)
     if (!buf) return;
     snprintf(buf, bufsize,
              "Options:\n"
-             "Input file:        %s\n"
-             "Input ext:         %s\n"
-             "Output file:       %s\n"
-             "Output suffix:     %s\n"
-             "Pct scale:         %.1f\n"
-             "Quality:           %d\n"
-             "Width:             %d\n"
-             "Height:            %d\n"
-             "Verbosity:         %d\n"
-             "No-op:             %d",
+             "Input file:           %s\n"
+             "Input ext:            %s\n"
+             "Output file:          %s\n"
+             "Output suffix:        %s\n"
+             "Watermark text:       %s\n"
+             "Watermark opacity:    %.1f\n"
+             "Watermark replicate:  %d\n"
+             "Pct scale:            %.1f\n"
+             "Quality:              %d\n"
+             "Width:                %d\n"
+             "Height:               %d\n"
+             "Verbosity:            %d\n"
+             "No-op:                %d",
              options->input_file, options->file_extension, options->output_file,
-             options->output_file_suffix, options->pct_scale, options->quality, options->width,
+             options->output_file_suffix, options->watermark_text, options->watermark_opacity,
+             options->watermark_replicate, options->pct_scale, options->quality, options->width,
              options->height, options->verbosity, options->no_op);
 }
 
@@ -85,6 +92,9 @@ parse_args(int argc, char **argv, options_t *options)
                                            {"version", no_argument, 0, 'V'},
                                            {"help", no_argument, 0, 'h'},
                                            {"suffix", required_argument, 0, 's'},
+                                           {"replicate", no_argument, 0, 'r'},
+                                           {"text", required_argument, 0, 't'},
+                                           {"opacity", required_argument, 0, 'o'},
                                            {"pct-scale", required_argument, 0, 'p'},
                                            {"quality", required_argument, 0, 'q'},
                                            {"width", required_argument, 0, 'w'},
@@ -93,7 +103,7 @@ parse_args(int argc, char **argv, options_t *options)
 
     int option_index = 0;
 
-    while ((choice = getopt_long(argc, argv, "Vhvnw:H:p:s:q:", long_options, &option_index)) !=
+    while ((choice = getopt_long(argc, argv, "Vhvnw:t:o:rH:p:s:q:", long_options, &option_index)) !=
            -1) {
         switch (choice) {
         case 'V':
@@ -112,6 +122,15 @@ parse_args(int argc, char **argv, options_t *options)
             break;
         case 's':
             options->output_file_suffix = optarg;
+            break;
+        case 't':
+            options->watermark_text = optarg;
+            break;
+        case 'o':
+            options->watermark_opacity = atof(optarg);
+            break;
+        case 'r':
+            options->watermark_replicate = 1;
             break;
         case 'p':
             options->pct_scale = atof(optarg) / 100;
@@ -228,42 +247,49 @@ label_image(VipsObject *base, VipsImage *in, VipsImage **out, const char *messag
     VipsImage **t = (VipsImage **)vips_object_local_array(base, 10);
     static double background[3] = {255, 255, 255};
     static double ones[3] = {1, 1, 1};
-    int i = 0;
     int replicate = 0;
+    VipsImage *mask;
+    VipsImage *text;
 
     // Make the mask
-    if (vips_text(&t[i + 0], message, "dpi", 300, NULL) ||
-        vips_linear1(t[i + 0], &t[i + 1], 0.7, 0.0, NULL) ||
-        vips_cast(t[i + 1], &t[i + 2], VIPS_FORMAT_UCHAR, NULL) ||
-        vips_embed(t[i + 2], &t[i + 3], 25, 25, t[i + 2]->Xsize + 200, t[i + 2]->Ysize + 200,
-                   NULL)) {
-        g_object_unref(base);
-        vips_error_exit(NULL);
-    }
-    // TODO: why doesn't this work?
+    mask = t[0];
+    if (vips_text(&mask, message, "dpi", 300, NULL)) return -1;
+    if (vips_linear1(mask, &t[1], 0.7, 0.0, NULL)) return -1;
+    mask = t[1];
+
+    if (vips_cast(mask, &t[2], VIPS_FORMAT_UCHAR, NULL)) return -1;
+    mask = t[2];
+
+    if (vips_embed(mask, &t[3], 25, 25, mask->Xsize + 200, mask->Ysize + 200, NULL)) return -1;
+    mask = t[3];
+
     if (replicate) {
-        if (vips_replicate(t[i + 3], &t[i + 4], 1 + in->Xsize / t[i + 3]->Xsize,
-                           1 + in->Ysize / t[i + 3]->Ysize, NULL) ||
-            vips_crop(t[i + 3], &t[i + 4], 0, 0, in->Xsize, in->Ysize, NULL)) {
-            g_object_unref(base);
-            vips_error_exit(NULL);
-        }
-        ++i;
+        if (vips_replicate(mask, &t[4], 1 + in->Xsize / mask->Xsize, 1 + in->Ysize / mask->Ysize,
+                           NULL))
+            return -1;
+        mask = t[4];
+        if (vips_crop(mask, &t[5], 0, 0, in->Xsize, in->Ysize, NULL)) return -1;
+        mask = t[5];
     }
 
     // Make the constant image to paint the text with.
-    if (vips_black(&t[i + 4], 1, 1, NULL) ||
-        vips_linear(t[i + 4], &t[i + 5], ones, background, 3, NULL) ||
-        vips_cast(t[i + 5], &t[i + 6], VIPS_FORMAT_UCHAR, NULL) ||
-        vips_copy(t[i + 6], &t[i + 7], "interpretation", in->Type, NULL) ||
-        vips_embed(t[i + 7], &t[i + 8], 0, 0, in->Xsize, in->Ysize, "extend", VIPS_EXTEND_COPY,
-                   NULL)) {
-        g_object_unref(base);
-        vips_error_exit(NULL);
-    }
+    text = t[6];
+    if (vips_black(&text, 1, 1, NULL)) return -1;
+    if (vips_linear(text, &t[7], ones, background, 3, NULL)) return -1;
+    text = t[7];
+
+    if (vips_cast(text, &t[8], VIPS_FORMAT_UCHAR, NULL)) return -1;
+    text = t[8];
+
+    if (vips_copy(text, &t[9], "interpretation", in->Type, NULL)) return -1;
+    text = t[9];
+
+    if (vips_embed(text, &t[10], 0, 0, in->Xsize, in->Ysize, "extend", VIPS_EXTEND_COPY, NULL))
+        return -1;
+    text = t[10];
 
     // Blend the mask and text and write to output.
-    if (vips_ifthenelse(t[i + 3], t[i + 8], in, out, "blend", TRUE, NULL)) return (-1);
+    if (vips_ifthenelse(mask, text, in, out, "blend", TRUE, NULL)) return (-1);
     return (0);
 }
 
@@ -293,6 +319,9 @@ main(int argc, char **argv)
     opts->file_extension = NULL;
     opts->output_file = NULL;
     opts->output_file_suffix = "_edited";
+    opts->watermark_text = NULL;
+    opts->watermark_opacity = 0.7;
+    opts->watermark_replicate = 0;
     opts->quality = 85;
     opts->pct_scale = 0;
     opts->width = 0;
@@ -360,7 +389,7 @@ main(int argc, char **argv)
 
     // Debug print for options
     if (opts->verbosity > 1) {
-        char buf[300];
+        char buf[512];
         print_options_t(buf, sizeof(buf), opts);
         g_debug("%s", buf);
     }
@@ -389,6 +418,7 @@ main(int argc, char **argv)
     }
 
     // Print report
+    // TODO: move to func
     size_delta = in_buf_size - out_buf_size;
     in_size_human = humanize_bytes(in_buf_size);
     out_size_human = humanize_bytes(out_buf_size);
@@ -427,7 +457,7 @@ main(int argc, char **argv)
     g_free(in_buf);
     g_free(out_buf);
     g_object_unref(base);
-    free(opts);
+    g_free(opts);
 
     vips_shutdown();
 }
