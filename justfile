@@ -30,5 +30,5 @@ install: build
     fi
     just run #sh
 
-run:
-    ./build/{{bin_name}} ./test/sunset.jpg ./test/sunset_edited.jpg -p 50 -vv
+run +args='':
+    ./build/{{bin_name}} ./test/sunset.jpg ./test/sunset_edited.jpg -w 2000 -vv {{args}}

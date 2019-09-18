@@ -29,15 +29,21 @@ static const char *help_text =
     "FLAGS:\n"
     "  -h, --help             Display this help message and exit\n"
     "  -V, --version          Display program version and exit\n"
-    "  -v, --verbosity=<N>    Increase console debug message verbosity\n"
+    "  -n, --no-op            Show report only; don't process image\n"
     "\n"
     "OPTIONS:\n"
-    "  -w, --width            Output width of image\n"
-    "  -H, --height           Output height of image\n"
+    "  -v, --verbosity=<N>    Increase console debug message verbosity\n"
+    "  -s, --suffix=<TEXT>    Suffix to append to file name for edited file\n"
+    "\nIMAGE OPTIONS:\n"
+    "  -w, --width=<N>        Output width of image\n"
+    "  -H, --height=<N>       Output height of image\n"
     "  -p, --pct-scale=<N>    Scale output to pct of original size\n"
     "  -q, --quality=<N>      Encoding quality for JPEG images (default=85)\n"
-    "  -s, --suffix=<TEXT>    Suffix to append to file name for edited file\n"
-    "\n";
+    "\nWATERMARK OPTIONS:\n"
+    "  -t, --text=<TEXT>      Watermark text\n"
+    "  -o, --opacity=<N>      Watermark opacity (default 0.7)\n"
+    "  -r, --replicate        Replicate watermark across image\n"
+    "";
 
 /**
  * @brief Dummy no-op handler for logging
@@ -90,6 +96,7 @@ parse_args(int argc, char **argv, options_t *options)
     int choice;
     static struct option long_options[] = {{"verbosity", optional_argument, 0, 'v'},
                                            {"version", no_argument, 0, 'V'},
+                                           {"no-op", no_argument, 0, 'n'},
                                            {"help", no_argument, 0, 'h'},
                                            {"suffix", required_argument, 0, 's'},
                                            {"replicate", no_argument, 0, 'r'},
@@ -110,12 +117,15 @@ parse_args(int argc, char **argv, options_t *options)
             fprintf(stderr, "%s %s\n", argv[0], PACKAGE_VERSION);
             return EXIT_FAILURE;
             break;
-        case 'v':
-            if (optarg && atoi(optarg)) {
-                options->verbosity = atoi(optarg);
-            } else {
-                options->verbosity++;
+        case 'v': {
+            int i = 0;
+            if (optarg && ((i = atoi(optarg)))) {
+                options->verbosity = i;
+                break;
             }
+        }
+            // no arg; just increment
+            options->verbosity++;
             break;
         case 'n':
             options->no_op = 1;
@@ -126,24 +136,50 @@ parse_args(int argc, char **argv, options_t *options)
         case 't':
             options->watermark_text = optarg;
             break;
-        case 'o':
+        case 'o': {
+            double i = 0;
+            if (!optarg || !((i = atof(optarg)))) {
+                fprintf(stderr, "invalid -%c option '%s' - expecting a number\n", choice, optarg);
+                break;
+            }
+        }
             options->watermark_opacity = atof(optarg);
             break;
         case 'r':
             options->watermark_replicate = 1;
             break;
-        case 'p':
-            options->pct_scale = atof(optarg) / 100;
-            break;
-        case 'w':
-            options->width = atoi(optarg);
-            break;
-        case 'H':
-            options->height = atoi(optarg);
-            break;
-        case 'q':
-            options->quality = atoi(optarg);
-            break;
+        case 'p': {
+            double i = 0;
+            if (!optarg || !((i = atof(optarg)))) {
+                fprintf(stderr, "invalid -%c option '%s' - expecting a number\n", choice, optarg);
+                break;
+            }
+            options->pct_scale = i / 100;
+        } break;
+        case 'w': {
+            int i = 0;
+            if (!optarg || !((i = atoi(optarg)))) {
+                fprintf(stderr, "invalid -%c option '%s' - expecting a number\n", choice, optarg);
+                break;
+            }
+            options->width = i;
+        } break;
+        case 'H': {
+            int i = 0;
+            if (!optarg || !((i = atoi(optarg)))) {
+                fprintf(stderr, "invalid -%c option '%s' - expecting a number\n", choice, optarg);
+                break;
+            }
+            options->height = i;
+        } break;
+        case 'q': {
+            int i = 0;
+            if (!optarg || !((i = atoi(optarg)))) {
+                fprintf(stderr, "invalid -%c option '%s' - expecting a number\n", choice, optarg);
+                break;
+            }
+            options->quality = i;
+        } break;
         case ':':
             fprintf(stderr, "%s: option `-%c' requires an argument\n", argv[0], optopt);
             break;
@@ -242,19 +278,18 @@ get_new_filename(options_t *opts)
 }
 
 static int
-label_image(VipsObject *base, VipsImage *in, VipsImage **out, const char *message)
+watermark_text(VipsObject *base, VipsImage *in, VipsImage **out, options_t *opts)
 {
     VipsImage **t = (VipsImage **)vips_object_local_array(base, 10);
     static double background[3] = {255, 255, 255};
     static double ones[3] = {1, 1, 1};
-    int replicate = 0;
     VipsImage *mask;
     VipsImage *text;
 
     // Make the mask
     mask = t[0];
-    if (vips_text(&mask, message, "dpi", 300, NULL)) return -1;
-    if (vips_linear1(mask, &t[1], 0.7, 0.0, NULL)) return -1;
+    if (vips_text(&mask, opts->watermark_text, "dpi", 300, NULL)) return -1;
+    if (vips_linear1(mask, &t[1], opts->watermark_opacity, 0.0, NULL)) return -1;
     mask = t[1];
 
     if (vips_cast(mask, &t[2], VIPS_FORMAT_UCHAR, NULL)) return -1;
@@ -263,7 +298,7 @@ label_image(VipsObject *base, VipsImage *in, VipsImage **out, const char *messag
     if (vips_embed(mask, &t[3], 25, 25, mask->Xsize + 200, mask->Ysize + 200, NULL)) return -1;
     mask = t[3];
 
-    if (replicate) {
+    if (opts->watermark_replicate) {
         if (vips_replicate(mask, &t[4], 1 + in->Xsize / mask->Xsize, 1 + in->Ysize / mask->Ysize,
                            NULL))
             return -1;
@@ -302,7 +337,6 @@ main(int argc, char **argv)
     int in_height = 0;
     int out_width = 0;
     int out_height = 0;
-    const char *watermark_text = "© 2019 Nick Murphy | murphpix.com";
     char *in_size_human = NULL;
     char *out_size_human = NULL;
     char *size_delta_human = NULL;
@@ -319,7 +353,7 @@ main(int argc, char **argv)
     opts->file_extension = NULL;
     opts->output_file = NULL;
     opts->output_file_suffix = "_edited";
-    opts->watermark_text = NULL;
+    opts->watermark_text = "© 2019 Nick Murphy | murphpix.com";
     opts->watermark_opacity = 0.7;
     opts->watermark_replicate = 0;
     opts->quality = 85;
@@ -395,7 +429,7 @@ main(int argc, char **argv)
     }
 
     // Watermark image
-    if (label_image(base, t[0], &t[1], watermark_text)) {
+    if (watermark_text(base, t[0], &t[1], opts)) {
         g_object_unref(base);
         vips_error_exit("error adding watermark to image");
     }
